@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Avtonom Mashina Robot</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <!-- ─── Top Bar ─── -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="logo">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="1" y="6" width="22" height="12" rx="3"/>
+          <circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/>
+          <path d="M6 6V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"/>
+        </svg>
+        <span>AVTONOM MASHINA</span>
+      </div>
+    </div>
+    <div class="topbar-center">
+      <div class="status-chip" id="statusChip">
+        <span class="status-dot"></span>
+        <span class="status-text">Kutish</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="connection-badge" id="connBadge">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+          <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1"/>
+        </svg>
+        <span id="connText">Ulanmagan</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="main-layout">
+    <!-- ─── Left Panel ─── -->
+    <aside class="panel panel-left">
+      <!-- Map Selection -->
+      <section class="card">
+        <h3 class="card-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4z"/><path d="M8 2v16"/><path d="M16 6v16"/>
+          </svg>
+          Xarita
+        </h3>
+        <div class="card-body">
+          <select id="mapSelect" class="input-select">
+            <option value="">Xarita tanlang...</option>
+          </select>
+          <div class="btn-row">
+            <button id="btnLoadMap" class="btn btn-primary" disabled>Yuklash</button>
+            <button id="btnFindPath" class="btn btn-secondary" disabled>Yo'l topish</button>
+          </div>
+          <div class="upload-area" id="uploadArea">
+            <input type="file" id="fileInput" accept=".json" hidden>
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('fileInput').click()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              Xarita yuklash
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Navigation Controls -->
+      <section class="card">
+        <h3 class="card-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="3 11 22 2 13 21 11 13 3 11"/>
+          </svg>
+          Navigatsiya
+        </h3>
+        <div class="card-body">
+          <div class="nav-buttons">
+            <div class="btn-row">
+              <button id="btnStart" class="btn btn-success btn-full" disabled>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+                Boshlash
+              </button>
+              <button id="btnStop" class="btn btn-warning btn-full" disabled>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+                </svg>
+                To'xtatish
+              </button>
+            </div>
+            <button id="btnEmergency" class="btn btn-danger btn-full">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                <circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+              </svg>
+              FAVQULODDA TO'XTATISH
+            </button>
+          </div>
+
+          <!-- Progress -->
+          <div class="progress-section" id="progressSection" style="display:none">
+            <div class="progress-label">
+              <span>Waypoint</span>
+              <span id="progressText">0 / 0</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill" id="progressFill" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Manual Control -->
+      <section class="card">
+        <h3 class="card-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="6" width="20" height="12" rx="2"/>
+            <circle cx="8" cy="12" r="2"/><circle cx="16" cy="12" r="2"/>
+          </svg>
+          Qo'lda Boshqarish
+        </h3>
+        <div class="card-body">
+          <div class="dpad">
+            <button class="dpad-btn dpad-up" data-dir="forward">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 4l-8 8h5v8h6v-8h5z"/></svg>
+            </button>
+            <button class="dpad-btn dpad-left" data-dir="left">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M4 12l8-8v5h8v6h-8v5z"/></svg>
+            </button>
+            <button class="dpad-btn dpad-center" data-dir="stop">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+            </button>
+            <button class="dpad-btn dpad-right" data-dir="right">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20 12l-8-8v5H4v6h8v5z"/></svg>
+            </button>
+            <button class="dpad-btn dpad-down" data-dir="backward">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 20l8-8h-5V4H9v8H4z"/></svg>
+            </button>
+          </div>
+          <div class="speed-control">
+            <label>Tezlik: <span id="speedVal">150</span></label>
+            <input type="range" id="speedSlider" min="80" max="255" value="150" class="slider">
+          </div>
+          <p class="hint">Klaviatura: W A S D yoki strelkalar</p>
+        </div>
+      </section>
+    </aside>
+
+    <!-- ─── Center: Map ─── -->
+    <main class="panel panel-center">
+      <div class="map-container" id="mapContainer">
+        <canvas id="mapCanvas"></canvas>
+        <div class="map-placeholder" id="mapPlaceholder">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3">
+            <path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4z"/><path d="M8 2v16"/><path d="M16 6v16"/>
+          </svg>
+          <p>Xarita tanlang va yuklang</p>
+        </div>
+      </div>
+    </main>
+
+    <!-- ─── Right Panel ─── -->
+    <aside class="panel panel-right">
+      <!-- Compass -->
+      <section class="card">
+        <h3 class="card-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
+          </svg>
+          Kompas
+        </h3>
+        <div class="card-body compass-card">
+          <div class="compass">
+            <div class="compass-ring">
+              <span class="compass-label compass-n">N</span>
+              <span class="compass-label compass-e">E</span>
+              <span class="compass-label compass-s">S</span>
+              <span class="compass-label compass-w">W</span>
+              <div class="compass-needle" id="compassNeedle"></div>
+            </div>
+            <div class="compass-value" id="compassValue">0.0&deg;</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Telemetry -->
+      <section class="card">
+        <h3 class="card-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+          </svg>
+          Telemetriya
+        </h3>
+        <div class="card-body">
+          <div class="telemetry-grid">
+            <div class="tele-item">
+              <span class="tele-label">Encoder L</span>
+              <span class="tele-value" id="teleEncL">0</span>
+            </div>
+            <div class="tele-item">
+              <span class="tele-label">Encoder R</span>
+              <span class="tele-value" id="teleEncR">0</span>
+            </div>
+            <div class="tele-item">
+              <span class="tele-label">RPM L</span>
+              <span class="tele-value" id="teleRpmL">0</span>
+            </div>
+            <div class="tele-item">
+              <span class="tele-label">RPM R</span>
+              <span class="tele-value" id="teleRpmR">0</span>
+            </div>
+            <div class="tele-item tele-wide">
+              <span class="tele-label">To'siq masofasi</span>
+              <div class="distance-bar-wrap">
+                <div class="distance-bar" id="distBar"></div>
+                <span class="tele-value" id="teleDist">999 m</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Obstacle Indicator -->
+      <section class="card">
+        <h3 class="card-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          Xavfsizlik
+        </h3>
+        <div class="card-body">
+          <div class="obstacle-indicator" id="obstacleIndicator">
+            <div class="obstacle-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              </svg>
+            </div>
+            <span class="obstacle-text">Yo'l ochiq</span>
+          </div>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <!-- ─── Bottom Log Panel ─── -->
+  <footer class="log-panel">
+    <div class="log-header">
+      <span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        </svg>
+        Jurnal
+      </span>
+      <button class="btn btn-ghost btn-xs" id="btnClearLog">Tozalash</button>
+    </div>
+    <div class="log-body" id="logBody"></div>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
