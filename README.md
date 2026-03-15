@@ -1,64 +1,83 @@
 # 🚗 Avtonom Mashina Robot
 
-Raspberry Pi + ESP32-S3 asosida avtonom harakatlanadigan mashina robot.
-Mashinaga xarita (JSON) beriladi va u **A\* algoritmi** bilan yo'l topib, **encoder + kompas** yordamida mustaqil harakatlanadi.
+Raspberry Pi + ESP32 asosida avtonom harakatlanadigan Ackermann tuzilishidagi mashina robot.
+Mashinaga xarita (JSON) beriladi va u **A\* algoritmi** bilan yo'l topib, **encoder odometriyasi** yordamida mustaqil harakatlanadi.
 
 ## Arxitektura
 
 ```
 ┌─────────────────┐    UART Serial    ┌─────────────────┐
-│   Raspberry Pi  │◄────────────────►│    ESP32-S3     │
+│   Raspberry Pi  │◄────────────────►│     ESP32       │
 │                 │   CMD/DATA        │                 │
-│  • Xarita       │                   │  • Motorlar     │
-│  • A* yo'l      │                   │  • Encoderlar   │
-│  • Navigatsiya  │                   │  • Kompas       │
-│  • PID          │                   │  • Ultrasonic   │
+│  • Xarita       │                   │  • Haydash      │
+│  • A* yo'l      │                   │    motorlari    │
+│  • Navigatsiya  │                   │  • Rul motori   │
+│  • PID          │                   │  • 4x Encoder   │
+│  • Web UI       │                   │  • 6x Ultrasonic│
 └─────────────────┘                   └─────────────────┘
 ```
 
 ## Qurilma Komponentlari
 
-| Komponent | Vazifa |
-|-----------|--------|
-| Raspberry Pi 3/4/5 | Bosh kompyuter - yo'l topish va navigatsiya |
-| ESP32-S3 | Motor boshqaruv, sensor o'qish |
-| L298N Motor Driver | DC motorlarni boshqarish |
-| LM393 IR Encoder x2 | G'ildirak aylanishini hisoblash |
-| HMC5883L | Kompas - yo'nalish aniqlash |
-| HC-SR04 | Ultrasonic - to'siq aniqlash |
+| Komponent | Miqdor | Vazifa |
+|-----------|--------|--------|
+| Raspberry Pi 3/4/5 | 1 | Bosh kompyuter — yo'l topish, navigatsiya, Web UI |
+| ESP32 | 1 | Motor boshqaruv, sensor o'qish, odometriya |
+| BTS7960 Motor Driver | 3 | Oldinga/orqaga + rul motorlarini boshqarish |
+| LM393 IR Encoder | 4 | G'ildirak aylanishini hisoblash (odometriya) |
+| HC-SR04 Ultrasonic | 6 | To'siq aniqlash (old, old-o'ng, old-chap, o'ng, chap, orqa) |
 
-## Pin Ulanishlari (ESP32-S3)
+## Pin Ulanishlari (ESP32)
 
-| Pin | Komponent |
-|-----|-----------|
-| GPIO 4 | Encoder chap (LM393) |
-| GPIO 5 | Encoder o'ng (LM393) |
-| GPIO 8 | I2C SDA (HMC5883L) |
-| GPIO 9 | I2C SCL (HMC5883L) |
-| GPIO 10 | Ultrasonic TRIG |
-| GPIO 11 | Ultrasonic ECHO |
-| GPIO 16 | Motor A IN1 |
-| GPIO 17 | Motor A IN2 |
-| GPIO 18 | Motor A ENA (PWM) |
-| GPIO 19 | Motor B IN3 |
-| GPIO 20 | Motor B IN4 |
-| GPIO 21 | Motor B ENB (PWM) |
-| GPIO 43 | Serial TX (Pi ga) |
-| GPIO 44 | Serial RX (Pi dan) |
+### Haydash va Rul Motorlari (BTS7960)
+
+| Pin | Signal | Tavsif |
+|-----|--------|--------|
+| GPIO 18 | FRONT_RPWM | Old motor — oldinga PWM |
+| GPIO 19 | FRONT_LPWM | Old motor — orqaga PWM |
+| GPIO 21 | REAR_RPWM  | Orqa motor — oldinga PWM |
+| GPIO 22 | REAR_LPWM  | Orqa motor — orqaga PWM |
+| GPIO 26 | STEER_RPWM | Rul motori — o'ng PWM |
+| GPIO 27 | STEER_LPWM | Rul motori — chap PWM |
+
+### Ultrasonic Sensorlar (HC-SR04)
+
+| TRIG | ECHO | Sensor |
+|------|------|--------|
+| GPIO 13 | GPIO 14 | Old markaziy |
+| GPIO 15 | GPIO 16 | Old o'ng |
+| GPIO 17 | GPIO 23 | Old chap |
+| GPIO 25 | GPIO 32 | O'ng yon |
+| GPIO 33 | GPIO 34 | Chap yon |
+| GPIO 4  | GPIO 35 | Orqa |
+
+### Encoder Sensorlar (LM393 IR)
+
+| Pin | Tavsif |
+|-----|--------|
+| GPIO 36 | Old o'ng encoder (faqat kirish, pull-up yo'q) |
+| GPIO 39 | Old chap encoder (faqat kirish, pull-up yo'q) |
+| GPIO 5  | Orqa o'ng encoder (strapping pin, INPUT_PULLUP) |
+| GPIO 2  | Orqa chap encoder (strapping pin, INPUT_PULLUP) |
+
+### Serial Aloqa
+
+| Pin | Signal |
+|-----|--------|
+| GPIO 43 | TX — Raspberry Pi ga |
+| GPIO 44 | RX — Raspberry Pi dan |
 
 ## O'rnatish
 
-### ESP32-S3
+### ESP32
 1. Arduino IDE yoki PlatformIO o'rnating
-2. ESP32 board paketini qo'shing
-3. Kutubxonalarni o'rnating:
-   - `Adafruit HMC5883 Unified`
-   - `Adafruit Unified Sensor`
+2. ESP32 board paketini qo'shing (`esp32 by Espressif Systems`)
+3. Qo'shimcha kutubxona kerak emas — standart Arduino API ishlatiladi
 4. `esp32/car_controller/car_controller.ino` faylini ESP32 ga yuklang
 
 ### Raspberry Pi
 ```bash
-# Python kutubxonalarni o'rnating
+# Python kutubxonalarini o'rnating
 pip3 install pyserial flask flask-socketio
 
 # Loyiha papkasiga o'ting
@@ -89,8 +108,12 @@ cd raspberry_pi
 - `end` = manzil nuqta `[row, col]`
 - `cell_size` = har bir katak necha metr
 
-### 2. Dasturni ishga tushirish
+Tayyor xaritalar `maps/` papkasida: `example_map.json` (10×10 labirint), `simple_straight.json` (5×10 to'g'ri yo'l).
+
+### 2. Terminal orqali ishlatish
 ```bash
+cd raspberry_pi
+
 # Haqiqiy mashina bilan
 python3 main.py ../maps/example_map.json
 
@@ -104,61 +127,79 @@ python3 main.py --simulate ../maps/example_map.json
 ### 3. Natija
 ```
 ==================================================
-  AVTONOM MASHINA ROBOT
+  AUTONOMOUS CAR
 ==================================================
 
-[1] ESP32 ga ulanish...
-[COMM] ESP32 ga ulandi: /dev/ttyUSB0
+Connecting to ESP32...
+[COMM] ESP32 connected: /dev/ttyUSB0
 
-[2] Xarita yuklanmoqda...
-[MAP] Xarita yuklandi: 10x10
+map: ../maps/example_map.json
+[MAP] loaded: 10x10, start=(0,0), end=(9,9)
 
-[XARITA]
- S . . # # # . . . .
- # # . # . # . # # .
- . # . . . # . # # .
- . # # # . # . . # .
- . . . # . # # . # .
- # # . # . . . . # .
- # # . # # # # . # .
- . . . . . # # . . .
- . # # # . # # # # #
- . . . . . . . . . E
+[MAP] path found, 28 steps
+[MAP] 7 waypoints
 
-[3] Yo'l topilmoqda (A* algoritmi)...
-[MAP] Yo'l topildi! 28 qadam.
+press Enter when ready >>>
 
-[5] Navigatsiya boshlandi!
-  [TURN] Maqsad yo'nalish: 90°
-  [DRIVE] Masofa: 40 sm
-  ...
-✅ MANZILGA MUVAFFAQIYATLI YETILDI!
+navigation started!
+[NAV] waypoint 1/7: 90.0°, 3.0m
+  [DRIVE] 3.00m traveled
+...
+[NAV] destination reached!
 ```
 
 ## Aloqa Protokoli
 
 ### Pi → ESP32 (Buyruqlar)
+
 | Buyruq | Format | Tavsif |
 |--------|--------|--------|
-| Motor | `CMD:left,right\n` | Tezlik -255..255 |
-| To'xtatish | `STOP\n` | Motorlarni to'xtatish |
-| Ping | `PING\n` | Aloqa tekshirish |
-| Encoder reset | `RESET_ENC\n` | Encoderlarni nolga |
+| Haydash | `CMD:speed,steer_angle\n` | Tezlik −255..255, rul burchagi −30..+30° |
+| To'xtatish | `STOP\n` | Barcha motorlarni to'xtatish |
+| Ping | `PING\n` | Aloqa tekshirish (`PONG` javob kutiladi) |
+| Encoder reset | `RESET_ENC\n` | Encoderlar va heading ni nolga qaytarish |
 
 ### ESP32 → Pi (Telemetriya)
+
 | Xabar | Format | Tavsif |
 |-------|--------|--------|
-| Ma'lumot | `DATA:encL,encR,heading,rpmL,rpmR,dist\n` | 10 Hz |
-| Ogohlantirish | `WARN:OBSTACLE\n` | To'siq aniqlandi |
-| Ogohlantirish | `WARN:TIMEOUT\n` | Buyruq kelmadi |
+| Ma'lumot | `DATA:encL,encR,heading,rpmL,rpmR,dFront,dFrontRight,dFrontLeft,dRight,dLeft,dRear\n` | 10 Hz |
+| Old to'siq | `WARN:OBSTACLE\n` | Oldinda to'siq ≤ 0.5 m |
+| Orqa to'siq | `WARN:OBSTACLE_REAR\n` | Orqada to'siq ≤ 0.5 m |
+| Timeout | `WARN:TIMEOUT\n` | 2 soniya buyruq kelmadi |
+
+**DATA maydoni izohi:**
+
+| Maydon | Birlik | Tavsif |
+|--------|--------|--------|
+| `encL` | puls | Chap encoder umumiy pulslari (old+orqa o'rtacha) |
+| `encR` | puls | O'ng encoder umumiy pulslari (old+orqa o'rtacha) |
+| `heading` | daraja | Odometriya asosida yo'nalish (shimol = 0°) |
+| `rpmL` | RPM | Chap g'ildirak aylanish tezligi |
+| `rpmR` | RPM | O'ng g'ildirak aylanish tezligi |
+| `dFront` | metr | Old markaziy sensor masofasi |
+| `dFrontRight` | metr | Old o'ng sensor masofasi |
+| `dFrontLeft` | metr | Old chap sensor masofasi |
+| `dRight` | metr | O'ng yon sensor masofasi |
+| `dLeft` | metr | Chap yon sensor masofasi |
+| `dRear` | metr | Orqa sensor masofasi |
 
 ## Sozlash
 
 `raspberry_pi/config.py` faylida barcha parametrlarni o'zgartirish mumkin:
-- G'ildirak o'lchamlari
-- PID koeffitsientlari
-- Motor tezliklari
-- Xavfsizlik masofasi
+
+| Parametr | Standart | Tavsif |
+|----------|----------|--------|
+| `SERIAL_PORT` | `/dev/ttyUSB0` | ESP32 serial porti |
+| `SERIAL_BAUD` | `115200` | Baud rate |
+| `WHEEL_DIAMETER` | `0.25 m` | G'ildirak diametri |
+| `WHEEL_BASE` | `1.8 m` | Old va orqa o'q orasidagi masofa |
+| `PULSES_PER_REV` | `4` | Bir aylanishdagi encoder pulslar soni |
+| `MAX_STEER_ANGLE` | `30°` | Maksimal rul burchagi |
+| `BASE_SPEED` | `150` | Oddiy haydash tezligi (PWM 0–255) |
+| `OBSTACLE_DISTANCE` | `0.5 m` | To'siq to'xtatish masofasi |
+| `PID_KP/KI/KD` | `1.5 / 0.03 / 0.4` | To'g'ri haydash PID koeffitsientlari |
+| `TURN_PID_KP/KI/KD` | `1.0 / 0.01 / 0.3` | Burilish PID koeffitsientlari |
 
 ## 🖥️ Web UI Dashboard
 
@@ -187,8 +228,8 @@ Brauzerda oching: `http://localhost:5000` (yoki `--web-port` bilan ko'rsatilgan 
 | 🗺️ **Xarita paneli** | Xarita tanlash, yuklash, yo'l topish (A*), canvas vizualizatsiya |
 | ▶️ **Navigatsiya** | Start/Stop/Favqulodda to'xtatish tugmalari, waypoint progress bar |
 | 🎮 **Qo'lda boshqarish** | D-pad tugmalar + klaviatura (WASD/strelkalar), tezlik slider |
-| 🧭 **Kompas** | Real-time yo'nalish ko'rsatish (needle animatsiya) |
-| 📊 **Telemetriya** | Encoder, RPM, to'siq masofasi — real-time yangilanadi |
+| 🧭 **Yo'nalish** | Real-time odometriya asosida heading ko'rsatish |
+| 📊 **Telemetriya** | Encoder, RPM, 6 ta sensor masofasi — real-time yangilanadi |
 | 🛡️ **Xavfsizlik** | To'siq indikatori, favqulodda to'xtatish (Spacebar) |
 | 📋 **Jurnal** | Barcha hodisalar rangli log panelda ko'rinadi |
 
@@ -198,32 +239,15 @@ Brauzerda oching: `http://localhost:5000` (yoki `--web-port` bilan ko'rsatilgan 
 |-------|---------|
 | `W` / `↑` | Oldinga |
 | `S` / `↓` | Orqaga |
-| `A` / `←` | Chapga |
-| `D` / `→` | O'ngga |
+| `A` / `←` | Chapga (rul) |
+| `D` / `→` | O'ngga (rul) |
 | `Probel` | Favqulodda to'xtatish |
-
-### Xarita formati
-```json
-{
-  "name": "Mening xaritam",
-  "cell_size": 1.0,
-  "start": [0, 0],
-  "end": [4, 4],
-  "map": [
-    [1, 1, 1, 0, 0],
-    [0, 0, 1, 0, 0],
-    [1, 1, 1, 1, 1],
-    [1, 0, 0, 0, 1],
-    [1, 1, 1, 1, 1]
-  ]
-}
-```
-
-Xaritani `maps/` papkasiga `.json` sifatida joylashtiring yoki Web UI orqali yuklang.
 
 ## Xavfsizlik
 
-- **To'siq aniqlash**: Ultrasonic sensor 15sm dan yaqin to'siq aniqlasa mashina to'xtaydi
-- **Buyruq timeout**: 2 sekund ichida Pi dan buyruq kelmasa motorlar to'xtaydi
+- **6 ta to'siq sensori**: Old (markaziy, o'ng, chap), yon (o'ng, chap), orqa — 0.5 m dan yaqin to'siq aniqlansa mashina to'xtaydi
+- **Orqa to'siq**: Orqaga ketayotganda orqa sensor nazorat qilinadi
+- **3-nuqtali burilish**: Tor joyda burilib bo'lmasa, mashina orqaga chekinib qayta urinadi (5 marta)
+- **Buyruq timeout**: 2 sekund ichida Pi dan buyruq kelmasa motorlar avtomatik to'xtaydi
 - **Ctrl+C / Spacebar**: Istalgan vaqtda to'xtatish mumkin
 - **Favqulodda to'xtatish**: Web UI dagi qizil tugma yoki Spacebar
