@@ -1,35 +1,35 @@
-// --- BTS7960 motorlar ---
-// oldJuft: old motorlar jufti
-#define OLD_JUFT_RPWM   18
-#define OLD_JUFT_LPWM   19
-// orqaJuft: orqa motorlar jufti
-#define ORQA_JUFT_RPWM  21
-#define ORQA_JUFT_LPWM  22
-// rul: rul motori
-#define RUL_RPWM        26
-#define RUL_LPWM        27
+// --- BTS7960 motors ---
+// front motors
+#define FRONT_RPWM   18
+#define FRONT_LPWM   19
+// rear motors
+#define REAR_RPWM    21
+#define REAR_LPWM    22
+// steering motor
+#define STEER_RPWM   26
+#define STEER_LPWM   27
 
-// --- HC-SR04 ultrasonik sensorlar (6 ta) ---
-#define OLDI_TRIG        13
-#define OLDI_ECHO        14
-#define OLD_ONG_TRIG     15
-#define OLD_ONG_ECHO     16
-#define OLD_CHAP_TRIG    17
-#define OLD_CHAP_ECHO    23
-#define ONG_TOMON_TRIG   25
-#define ONG_TOMON_ECHO   32
-#define CHAP_TOMON_TRIG  33
-#define CHAP_TOMON_ECHO  34   // faqat kirish, ichki pull-up/pull-down yo'q
-#define ORQA_TRIG        4
-#define ORQA_ECHO        35   // faqat kirish
+// --- HC-SR04 ultrasonic sensors (6 total) ---
+#define FRONT_TRIG        13
+#define FRONT_ECHO        14
+#define FRONT_RIGHT_TRIG  15
+#define FRONT_RIGHT_ECHO  16
+#define FRONT_LEFT_TRIG   17
+#define FRONT_LEFT_ECHO   23
+#define RIGHT_TRIG        25
+#define RIGHT_ECHO        32
+#define LEFT_TRIG         33
+#define LEFT_ECHO         34   // input only, no internal pull-up/pull-down
+#define REAR_TRIG         4
+#define REAR_ECHO         35   // input only
 
-// --- LM393 IR odometriya sensorlar (4 ta) ---
-#define ENC_OLDI_ONG   36   // oldiOng - faqat kirish (VP), ichki pull-up/pull-down yo'q
-#define ENC_OLDI_CHAP  39   // oldiChap - faqat kirish (VN), ichki pull-up/pull-down yo'q
-#define ENC_ORQA_ONG    5   // orqaOng  - strapping pin: yuklashda HIGH bo'lishi kerak
-#define ENC_ORQA_CHAP   2   // orqaChap - strapping pin: yuklashda LOW bo'lishi kerak
+// --- LM393 IR odometry sensors (4 total) ---
+#define ENC_FRONT_RIGHT  36   // input only (VP), no internal pull-up/pull-down
+#define ENC_FRONT_LEFT   39   // input only (VN), no internal pull-up/pull-down
+#define ENC_REAR_RIGHT    5   // strapping pin: must be HIGH at boot
+#define ENC_REAR_LEFT     2   // strapping pin: must be LOW at boot
 
-// --- Pi bilan serial ---
+// --- Serial connection to Raspberry Pi ---
 #define RPI_TX    43
 #define RPI_RX    44
 #define RPI_BAUD  115200
@@ -37,43 +37,43 @@
 #define PULSES_PER_REV  4
 #define DEBOUNCE_MS     10
 #define WHEEL_CIRC      0.785f   // PI * 0.25m
-#define WHEEL_BASE      1.8f     // metr
-#define MAX_STEER       30       // maksimal rul burchagi (daraja)
+#define WHEEL_BASE      1.8f     // metres
+#define MAX_STEER       30       // maximum steering angle (degrees)
 
 #define DATA_INTERVAL   100
 #define CMD_TIMEOUT     2000
 #define OBSTACLE_DIST_M 0.5f
-#define ULTRA_TIMEOUT   20000    // 20ms -> ~3.4m maksimal masofa
+#define ULTRA_TIMEOUT   20000    // 20ms -> ~3.4m max range
 
-// --- encoder o'zgaruvchilari ---
-volatile unsigned long encOldiOng  = 0;
-volatile unsigned long encOldiChap = 0;
-volatile unsigned long encOrqaOng  = 0;
-volatile unsigned long encOrqaChap = 0;
-volatile unsigned long lastPulseOO = 0;
-volatile unsigned long lastPulseOC = 0;
-volatile unsigned long lastPulseRO = 0;
-volatile unsigned long lastPulseRC = 0;
-unsigned long prevEncOO = 0, prevEncOC = 0;
-unsigned long prevEncRO = 0, prevEncRC = 0;
+// --- encoder variables ---
+volatile unsigned long encFrontRight = 0;
+volatile unsigned long encFrontLeft  = 0;
+volatile unsigned long encRearRight  = 0;
+volatile unsigned long encRearLeft   = 0;
+volatile unsigned long lastPulseFR   = 0;
+volatile unsigned long lastPulseFL   = 0;
+volatile unsigned long lastPulseRR   = 0;
+volatile unsigned long lastPulseRL   = 0;
+unsigned long prevEncFR = 0, prevEncFL = 0;
+unsigned long prevEncRR = 0, prevEncRL = 0;
 
-// --- RPM va yo'nalish ---
+// --- RPM and heading ---
 unsigned long lastRpmTime = 0;
 float rpmLeft  = 0.0;
 float rpmRight = 0.0;
-float heading  = 0.0;   // odometriya asosida, daraja
+float heading  = 0.0;   // odometry-based, degrees
 
-// --- masofalar ---
-float distOldi     = 999.0;
-float distOldOng   = 999.0;
-float distOldChap  = 999.0;
-float distOngTomon  = 999.0;
-float distChapTomon = 999.0;
-float distOrqa     = 999.0;
+// --- distances ---
+float distFront      = 999.0;
+float distFrontRight = 999.0;
+float distFrontLeft  = 999.0;
+float distRight      = 999.0;
+float distLeft       = 999.0;
+float distRear       = 999.0;
 
 // --- haydash holati ---
 int driveSpeed = 0;
-int steerAngle = 0;   // -MAX_STEER..+MAX_STEER daraja
+int steerAngle = 0;   // -MAX_STEER..+MAX_STEER degrees
 
 // --- aloqa ---
 String inputBuf = "";
@@ -82,29 +82,29 @@ unsigned long lastCmdTime  = 0;
 
 
 // =====================================================================
-// ISR - encoder impulslari
+// ISR - encoder pulses
 // =====================================================================
 
-void IRAM_ATTR isr_OldiOng() {
+void IRAM_ATTR isr_FrontRight() {
   unsigned long now = millis();
-  if (now - lastPulseOO > DEBOUNCE_MS) { encOldiOng++;  lastPulseOO = now; }
+  if (now - lastPulseFR > DEBOUNCE_MS) { encFrontRight++; lastPulseFR = now; }
 }
-void IRAM_ATTR isr_OldiChap() {
+void IRAM_ATTR isr_FrontLeft() {
   unsigned long now = millis();
-  if (now - lastPulseOC > DEBOUNCE_MS) { encOldiChap++; lastPulseOC = now; }
+  if (now - lastPulseFL > DEBOUNCE_MS) { encFrontLeft++;  lastPulseFL = now; }
 }
-void IRAM_ATTR isr_OrqaOng() {
+void IRAM_ATTR isr_RearRight() {
   unsigned long now = millis();
-  if (now - lastPulseRO > DEBOUNCE_MS) { encOrqaOng++;  lastPulseRO = now; }
+  if (now - lastPulseRR > DEBOUNCE_MS) { encRearRight++;  lastPulseRR = now; }
 }
-void IRAM_ATTR isr_OrqaChap() {
+void IRAM_ATTR isr_RearLeft() {
   unsigned long now = millis();
-  if (now - lastPulseRC > DEBOUNCE_MS) { encOrqaChap++; lastPulseRC = now; }
+  if (now - lastPulseRL > DEBOUNCE_MS) { encRearLeft++;   lastPulseRL = now; }
 }
 
 
 // =====================================================================
-// BTS7960 motor boshqaruv
+// BTS7960 motor control
 // =====================================================================
 
 void setBTS7960(int rpwmPin, int lpwmPin, int spd) {
@@ -122,20 +122,20 @@ void setBTS7960(int rpwmPin, int lpwmPin, int spd) {
 }
 
 void setMotors(int spd) {
-  // oldJuft va orqaJuft bir xil tezlikda (Ackermann)
+  // front and rear motors at the same speed (Ackermann)
   spd = constrain(spd, -255, 255);
   driveSpeed = spd;
-  setBTS7960(OLD_JUFT_RPWM,  OLD_JUFT_LPWM,  spd);
-  setBTS7960(ORQA_JUFT_RPWM, ORQA_JUFT_LPWM, spd);
+  setBTS7960(FRONT_RPWM, FRONT_LPWM, spd);
+  setBTS7960(REAR_RPWM,  REAR_LPWM,  spd);
 }
 
 void setSteering(int angleDeg) {
-  // angleDeg: -MAX_STEER..+MAX_STEER (manfiy=chapga, musbat=o'ngga)
-  // Proportsional PWM: -30 -> -255, 0 -> 0, +30 -> +255
+  // angleDeg: -MAX_STEER..+MAX_STEER (negative=left, positive=right)
+  // Proportional PWM: -30 -> -255, 0 -> 0, +30 -> +255
   angleDeg = constrain(angleDeg, -MAX_STEER, MAX_STEER);
   steerAngle = angleDeg;
   int pwm = (int)((float)angleDeg / (float)MAX_STEER * 255.0f);
-  setBTS7960(RUL_RPWM, RUL_LPWM, pwm);
+  setBTS7960(STEER_RPWM, STEER_LPWM, pwm);
 }
 
 void stopMotors() {
@@ -147,7 +147,7 @@ void stopMotors() {
 
 
 // =====================================================================
-// Ultrasonik sensor o'lchash
+// Ultrasonic sensor reading
 // =====================================================================
 
 float readUltrasonic(int trigPin, int echoPin) {
@@ -158,26 +158,26 @@ float readUltrasonic(int trigPin, int echoPin) {
   digitalWrite(trigPin, LOW);
   long dur = pulseIn(echoPin, HIGH, ULTRA_TIMEOUT);
   if (dur == 0) return 999.0f;
-  return (dur * 0.0343f / 2.0f) / 100.0f;   // metrga
+  return (dur * 0.0343f / 2.0f) / 100.0f;   // convert to metres
 }
 
-// Sensorlarni navbatma-navbat o'qish (bloklanishni kamaytirish uchun)
+// Read sensors one at a time (round-robin to reduce blocking)
 void updateNextSensor() {
   static uint8_t idx = 0;
   switch (idx) {
-    case 0: distOldi      = readUltrasonic(OLDI_TRIG,       OLDI_ECHO);       break;
-    case 1: distOldOng    = readUltrasonic(OLD_ONG_TRIG,    OLD_ONG_ECHO);    break;
-    case 2: distOldChap   = readUltrasonic(OLD_CHAP_TRIG,   OLD_CHAP_ECHO);   break;
-    case 3: distOngTomon  = readUltrasonic(ONG_TOMON_TRIG,  ONG_TOMON_ECHO);  break;
-    case 4: distChapTomon = readUltrasonic(CHAP_TOMON_TRIG, CHAP_TOMON_ECHO); break;
-    case 5: distOrqa      = readUltrasonic(ORQA_TRIG,       ORQA_ECHO);       break;
+    case 0: distFront      = readUltrasonic(FRONT_TRIG,       FRONT_ECHO);       break;
+    case 1: distFrontRight = readUltrasonic(FRONT_RIGHT_TRIG, FRONT_RIGHT_ECHO); break;
+    case 2: distFrontLeft  = readUltrasonic(FRONT_LEFT_TRIG,  FRONT_LEFT_ECHO);  break;
+    case 3: distRight      = readUltrasonic(RIGHT_TRIG,       RIGHT_ECHO);       break;
+    case 4: distLeft       = readUltrasonic(LEFT_TRIG,        LEFT_ECHO);        break;
+    case 5: distRear       = readUltrasonic(REAR_TRIG,        REAR_ECHO);        break;
   }
   idx = (idx + 1) % 6;
 }
 
 
 // =====================================================================
-// Odometriya: RPM va heading hisoblash
+// Odometry: RPM and heading calculation
 // =====================================================================
 
 void updateOdometry() {
@@ -186,28 +186,28 @@ void updateOdometry() {
   if (elapsed < 200) return;
 
   noInterrupts();
-  unsigned long oO = encOldiOng,  oC = encOldiChap;
-  unsigned long rO = encOrqaOng,  rC = encOrqaChap;
+  unsigned long fR = encFrontRight, fL = encFrontLeft;
+  unsigned long rR = encRearRight,  rL = encRearLeft;
   interrupts();
 
-  unsigned long dOO = oO - prevEncOO;
-  unsigned long dOC = oC - prevEncOC;
-  unsigned long dRO = rO - prevEncRO;
-  unsigned long dRC = rC - prevEncRC;
-  prevEncOO = oO; prevEncOC = oC;
-  prevEncRO = rO; prevEncRC = rC;
+  unsigned long dFR = fR - prevEncFR;
+  unsigned long dFL = fL - prevEncFL;
+  unsigned long dRR = rR - prevEncRR;
+  unsigned long dRL = rL - prevEncRL;
+  prevEncFR = fR; prevEncFL = fL;
+  prevEncRR = rR; prevEncRL = rL;
 
   float sec  = elapsed / 1000.0f;
   float base = 60.0f / (float)PULSES_PER_REV / sec;
-  rpmLeft  = ((dOC + dRC) / 2.0f) * base;
-  rpmRight = ((dOO + dRO) / 2.0f) * base;
+  rpmLeft  = ((dFL + dRL) / 2.0f) * base;
+  rpmRight = ((dFR + dRR) / 2.0f) * base;
 
-  // Differensial odometriya orqali heading yangilash
-  // Encoder pulslari har doim musbat sanaganligi uchun
-  // orqaga yurishda virtual masofa ishorasi qo'lda teskari qilinadi
+  // Differential odometry heading update.
+  // Encoder pulses always count positively, so reverse-travel
+  // distance sign is applied manually when driving backwards.
   float mpp    = WHEEL_CIRC / (float)PULSES_PER_REV;
-  float dLeft  = ((dOC + dRC) / 2.0f) * mpp;
-  float dRight = ((dOO + dRO) / 2.0f) * mpp;
+  float dLeft  = ((dFL + dRL) / 2.0f) * mpp;
+  float dRight = ((dFR + dRR) / 2.0f) * mpp;
   if (driveSpeed < 0) { dLeft = -dLeft; dRight = -dRight; }
   float dTheta = (dRight - dLeft) / WHEEL_BASE * (180.0f / PI);
   heading = fmod(heading + dTheta + 360.0f, 360.0f);
@@ -217,7 +217,7 @@ void updateOdometry() {
 
 
 // =====================================================================
-// Pi bilan aloqa
+// Communication with Pi
 // =====================================================================
 
 void processCommand(String cmd) {
@@ -243,8 +243,8 @@ void processCommand(String cmd) {
   }
   else if (cmd == "RESET_ENC") {
     noInterrupts();
-    encOldiOng = encOldiChap = encOrqaOng = encOrqaChap = 0;
-    prevEncOO  = prevEncOC  = prevEncRO  = prevEncRC  = 0;
+    encFrontRight = encFrontLeft = encRearRight = encRearLeft = 0;
+    prevEncFR     = prevEncFL   = prevEncRR    = prevEncRL   = 0;
     interrupts();
     heading = 0.0f;
     Serial1.println("ACK:RESET_ENC");
@@ -267,28 +267,28 @@ void sendTelemetry() {
   if (millis() - lastDataSend < DATA_INTERVAL) return;
 
   noInterrupts();
-  unsigned long oO = encOldiOng, oC = encOldiChap;
-  unsigned long rO = encOrqaOng, rC = encOrqaChap;
+  unsigned long fR = encFrontRight, fL = encFrontLeft;
+  unsigned long rR = encRearRight,  rL = encRearLeft;
   interrupts();
 
-  // encL = chap encoderlar o'rtacha, encR = ong encoderlar o'rtacha
-  // Floating-point bo'linish keyin butun songa o'tkaziladi (Raspberry Pi tomonida o'z navbatida o'rtacha)
-  unsigned long encL = (oC + rC + 1) / 2;   // yaxlitlash uchun +1
-  unsigned long encR = (oO + rO + 1) / 2;
+  // encL = average of left encoders, encR = average of right encoders
+  // +1 for rounding before integer truncation (averaged on Raspberry Pi side)
+  unsigned long encL = (fL + rL + 1) / 2;
+  unsigned long encR = (fR + rR + 1) / 2;
 
-  // DATA:encL,encR,heading,rpmL,rpmR,dOldi,dOldOng,dOldChap,dOng,dChap,dOrqa
+  // DATA:encL,encR,heading,rpmL,rpmR,dFront,dFrontRight,dFrontLeft,dRight,dLeft,dRear
   String data = "DATA:";
-  data += String(encL)               + ",";
-  data += String(encR)               + ",";
-  data += String(heading, 1)         + ",";
-  data += String(rpmLeft,  1)        + ",";
-  data += String(rpmRight, 1)        + ",";
-  data += String(distOldi,     2)    + ",";
-  data += String(distOldOng,   2)    + ",";
-  data += String(distOldChap,  2)    + ",";
-  data += String(distOngTomon,  2)   + ",";
-  data += String(distChapTomon, 2)   + ",";
-  data += String(distOrqa,     2);
+  data += String(encL)                  + ",";
+  data += String(encR)                  + ",";
+  data += String(heading, 1)            + ",";
+  data += String(rpmLeft,  1)           + ",";
+  data += String(rpmRight, 1)           + ",";
+  data += String(distFront,      2)     + ",";
+  data += String(distFrontRight, 2)     + ",";
+  data += String(distFrontLeft,  2)     + ",";
+  data += String(distRight,      2)     + ",";
+  data += String(distLeft,       2)     + ",";
+  data += String(distRear,       2);
 
   Serial1.println(data);
   lastDataSend = millis();
@@ -303,67 +303,67 @@ void setup() {
   Serial.begin(115200);
   Serial1.begin(RPI_BAUD, SERIAL_8N1, RPI_RX, RPI_TX);
 
-  // BTS7960 drive motorlar PWM - 1kHz, 8-bit
-  ledcAttach(OLD_JUFT_RPWM,  1000, 8);
-  ledcAttach(OLD_JUFT_LPWM,  1000, 8);
-  ledcAttach(ORQA_JUFT_RPWM, 1000, 8);
-  ledcAttach(ORQA_JUFT_LPWM, 1000, 8);
-  // BTS7960 rul motori PWM - 1kHz, 8-bit
-  ledcAttach(RUL_RPWM, 1000, 8);
-  ledcAttach(RUL_LPWM, 1000, 8);
+  // BTS7960 drive motors PWM - 1kHz, 8-bit
+  ledcAttach(FRONT_RPWM, 1000, 8);
+  ledcAttach(FRONT_LPWM, 1000, 8);
+  ledcAttach(REAR_RPWM,  1000, 8);
+  ledcAttach(REAR_LPWM,  1000, 8);
+  // BTS7960 steering motor PWM - 1kHz, 8-bit
+  ledcAttach(STEER_RPWM, 1000, 8);
+  ledcAttach(STEER_LPWM, 1000, 8);
   stopMotors();
 
-  // Ultrasonik trigger/echo pinlar
-  int trigPins[] = { OLDI_TRIG, OLD_ONG_TRIG, OLD_CHAP_TRIG,
-                     ONG_TOMON_TRIG, CHAP_TOMON_TRIG, ORQA_TRIG };
-  int echoPins[] = { OLDI_ECHO, OLD_ONG_ECHO, OLD_CHAP_ECHO,
-                     ONG_TOMON_ECHO, CHAP_TOMON_ECHO, ORQA_ECHO };
+  // Ultrasonic trigger/echo pins
+  int trigPins[] = { FRONT_TRIG, FRONT_RIGHT_TRIG, FRONT_LEFT_TRIG,
+                     RIGHT_TRIG, LEFT_TRIG, REAR_TRIG };
+  int echoPins[] = { FRONT_ECHO, FRONT_RIGHT_ECHO, FRONT_LEFT_ECHO,
+                     RIGHT_ECHO, LEFT_ECHO, REAR_ECHO };
   for (int i = 0; i < 6; i++) {
     pinMode(trigPins[i], OUTPUT);
     digitalWrite(trigPins[i], LOW);
     pinMode(echoPins[i], INPUT);
   }
 
-  // LM393 encoder pinlar
-  // GPIO36, 39 - faqat kirish, ichki pull-up yo'q
-  pinMode(ENC_OLDI_ONG,  INPUT);
-  pinMode(ENC_OLDI_CHAP, INPUT);
-  // GPIO5, 2 - strapping pinlar, ehtiyotkorlik bilan
-  pinMode(ENC_ORQA_ONG,  INPUT_PULLUP);
-  pinMode(ENC_ORQA_CHAP, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(ENC_OLDI_ONG),  isr_OldiOng,  FALLING);
-  attachInterrupt(digitalPinToInterrupt(ENC_OLDI_CHAP), isr_OldiChap, FALLING);
-  attachInterrupt(digitalPinToInterrupt(ENC_ORQA_ONG),  isr_OrqaOng,  FALLING);
-  attachInterrupt(digitalPinToInterrupt(ENC_ORQA_CHAP), isr_OrqaChap, FALLING);
+  // LM393 encoder pins
+  // GPIO36, 39 - input only, no internal pull-up
+  pinMode(ENC_FRONT_RIGHT, INPUT);
+  pinMode(ENC_FRONT_LEFT,  INPUT);
+  // GPIO5, 2 - strapping pins, handle with care
+  pinMode(ENC_REAR_RIGHT,  INPUT_PULLUP);
+  pinMode(ENC_REAR_LEFT,   INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(ENC_FRONT_RIGHT), isr_FrontRight, FALLING);
+  attachInterrupt(digitalPinToInterrupt(ENC_FRONT_LEFT),  isr_FrontLeft,  FALLING);
+  attachInterrupt(digitalPinToInterrupt(ENC_REAR_RIGHT),  isr_RearRight,  FALLING);
+  attachInterrupt(digitalPinToInterrupt(ENC_REAR_LEFT),   isr_RearLeft,   FALLING);
 
   lastCmdTime = millis();
   lastRpmTime = millis();
-  Serial.println("mashina tayyor (BTS7960 + 6x HC-SR04 + 4x LM393)");
+  Serial.println("car ready (BTS7960 + 6x HC-SR04 + 4x LM393)");
 }
 
 
 // =====================================================================
-// Asosiy tsikl
+// Main loop
 // =====================================================================
 
 void loop() {
   readCommands();
   updateOdometry();
 
-  // Sensorlarni navbatma-navbat o'qish (har 50ms da bitta)
+  // Read sensors one at a time (one per 50ms)
   static unsigned long lastSensorTime = 0;
   if (millis() - lastSensorTime >= 50) {
     updateNextSensor();
     lastSensorTime = millis();
   }
 
-  // Old to'siq tekshiruvi (oldinga yurayotganda)
-  if (driveSpeed > 0 && distOldi > 0.0f && distOldi < OBSTACLE_DIST_M) {
+  // Front obstacle check (while driving forward)
+  if (driveSpeed > 0 && distFront > 0.0f && distFront < OBSTACLE_DIST_M) {
     stopMotors();
     Serial1.println("WARN:OBSTACLE");
   }
-  // Orqa to'siq tekshiruvi (orqaga yurayotganda)
-  if (driveSpeed < 0 && distOrqa > 0.0f && distOrqa < OBSTACLE_DIST_M) {
+  // Rear obstacle check (while driving backward)
+  if (driveSpeed < 0 && distRear > 0.0f && distRear < OBSTACLE_DIST_M) {
     stopMotors();
     Serial1.println("WARN:OBSTACLE_REAR");
   }

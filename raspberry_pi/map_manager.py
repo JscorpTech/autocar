@@ -5,7 +5,7 @@ from config import CELL_SIZE, DIRECTION_MAP
 
 
 class MapManager:
-    """Xaritani o'qiydi, A* bilan yo'l topadi, waypoint chiqaradi"""
+    """Loads the map, finds a path with A*, generates waypoints"""
 
     def __init__(self):
         self.grid = []
@@ -27,11 +27,11 @@ class MapManager:
             self.start = tuple(data["start"])
             self.end = tuple(data["end"])
 
-            print(f"[MAP] yuklandi: {self.rows}x{self.cols}, "
+            print(f"[MAP] loaded: {self.rows}x{self.cols}, "
                   f"start={self.start}, end={self.end}")
             return True
         except Exception as e:
-            print(f"[MAP] xato: {e}")
+            print(f"[MAP] error: {e}")
             return False
 
     def load_from_grid(self, grid, start, end):
@@ -42,15 +42,15 @@ class MapManager:
         self.end = end
 
     def find_path(self):
-        """A* bilan eng qisqa yo'l"""
+        """Find the shortest path using A*"""
         if not self.grid:
-            print("[MAP] xarita yuklanmagan")
+            print("[MAP] map not loaded")
             return []
 
         start, end = self.start, self.end
 
         if not self._is_valid(*start) or not self._is_valid(*end):
-            print(f"[MAP] start yoki end nuqta noto'g'ri")
+            print(f"[MAP] invalid start or end point")
             return []
 
         open_set = [(0, start)]
@@ -69,7 +69,7 @@ class MapManager:
                 path.append(start)
                 path.reverse()
                 self.path = path
-                print(f"[MAP] yo'l topildi, {len(path)} qadam")
+                print(f"[MAP] path found, {len(path)} steps")
                 return path
 
             for nb in self._get_neighbors(current):
@@ -80,12 +80,12 @@ class MapManager:
                     f_score[nb] = g + self._heuristic(nb, end)
                     heapq.heappush(open_set, (f_score[nb], nb))
 
-        print("[MAP] yo'l topilmadi!")
+        print("[MAP] no path found!")
         self.path = []
         return []
 
     def generate_waypoints(self):
-        """Bir xil yo'nalishdagi qadamlarni birlashtirib waypoint qiladi"""
+        """Merge consecutive steps in the same direction into one waypoint"""
         if len(self.path) < 2:
             return []
 
@@ -104,7 +104,7 @@ class MapManager:
 
             heading = DIRECTION_MAP[direction]
 
-            # shu yo'nalishda ketma-ket nechta qadam bor
+            # count consecutive steps in this direction
             steps = 0
             j = i
             while j < len(self.path) - 1:
@@ -128,7 +128,7 @@ class MapManager:
             i += steps
 
         self.waypoints = waypoints
-        print(f"[MAP] {len(waypoints)} ta waypoint")
+        print(f"[MAP] {len(waypoints)} waypoints")
         for idx, wp in enumerate(waypoints):
             print(f"  [{idx}] {wp['from']} -> {wp['to']}, "
                   f"{wp['heading']}°, {wp['distance']}m")
