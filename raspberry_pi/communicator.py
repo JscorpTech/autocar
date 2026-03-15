@@ -11,7 +11,12 @@ class TelemetryData:
     heading: float = 0.0
     rpm_left: float = 0.0
     rpm_right: float = 0.0
-    distance: float = 999.0
+    distance: float = 999.0        # oldi (old sensor)
+    dist_old_ong: float = 999.0    # old o'ng sensor
+    dist_old_chap: float = 999.0   # old chap sensor
+    dist_ong: float = 999.0        # o'ng tomon sensor
+    dist_chap: float = 999.0       # chap tomon sensor
+    dist_orqa: float = 999.0       # orqa sensor
     timestamp: float = 0.0
     obstacle_warning: bool = False
 
@@ -90,6 +95,11 @@ class Communicator:
                 rpm_left=self.telemetry.rpm_left,
                 rpm_right=self.telemetry.rpm_right,
                 distance=self.telemetry.distance,
+                dist_old_ong=self.telemetry.dist_old_ong,
+                dist_old_chap=self.telemetry.dist_old_chap,
+                dist_ong=self.telemetry.dist_ong,
+                dist_chap=self.telemetry.dist_chap,
+                dist_orqa=self.telemetry.dist_orqa,
                 timestamp=self.telemetry.timestamp,
                 obstacle_warning=self.telemetry.obstacle_warning,
             )
@@ -126,13 +136,18 @@ class Communicator:
                 parts = line[5:].split(",")
                 if len(parts) >= 6:
                     with self._lock:
-                        self.telemetry.encoder_left = int(parts[0])
+                        self.telemetry.encoder_left  = int(parts[0])
                         self.telemetry.encoder_right = int(parts[1])
-                        self.telemetry.heading = float(parts[2])
-                        self.telemetry.rpm_left = float(parts[3])
-                        self.telemetry.rpm_right = float(parts[4])
-                        self.telemetry.distance = float(parts[5])
-                        self.telemetry.timestamp = time.time()
+                        self.telemetry.heading       = float(parts[2])
+                        self.telemetry.rpm_left      = float(parts[3])
+                        self.telemetry.rpm_right     = float(parts[4])
+                        self.telemetry.distance      = float(parts[5])
+                        self.telemetry.dist_old_ong  = float(parts[6])  if len(parts) > 6  else 999.0
+                        self.telemetry.dist_old_chap = float(parts[7])  if len(parts) > 7  else 999.0
+                        self.telemetry.dist_ong      = float(parts[8])  if len(parts) > 8  else 999.0
+                        self.telemetry.dist_chap     = float(parts[9])  if len(parts) > 9  else 999.0
+                        self.telemetry.dist_orqa     = float(parts[10]) if len(parts) > 10 else 999.0
+                        self.telemetry.timestamp     = time.time()
                         self.telemetry.obstacle_warning = False
             except (ValueError, IndexError):
                 pass
