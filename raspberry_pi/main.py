@@ -18,7 +18,7 @@ class AutonomousCar:
         self.navigator = None
 
         if simulate:
-            print("[SIM] simulyatsiya rejimi, ESP32 siz ishlaymiz")
+            print("[SIM] simulation mode, running without ESP32")
             self.comm = SimulatedCommunicator()
         else:
             self.comm = Communicator(serial_port, baud, SERIAL_TIMEOUT)
@@ -30,29 +30,29 @@ class AutonomousCar:
 
     def run(self, map_file):
         print("=" * 50)
-        print("  AVTONOM MASHINA")
+        print("  AUTONOMOUS CAR")
         print("=" * 50)
 
         if not self.simulate:
-            print("\nESP32 ga ulanish...")
+            print("\nConnecting to ESP32...")
             if not self.comm.connect():
-                print("ESP32 ga ulanib bo'lmadi")
+                print("Failed to connect to ESP32")
                 return False
         else:
-            print("\nsimulatsiya rejim faol")
+            print("\nsimulation mode active")
 
-        print(f"\nxarita: {map_file}")
+        print(f"\nmap: {map_file}")
         if not self.map_mgr.load_from_file(map_file):
-            print("xarita yuklanmadi!")
+            print("map failed to load!")
             self._cleanup()
             return False
 
         self.map_mgr.print_map()
 
-        print("yo'l qidirilmoqda...")
+        print("searching for path...")
         path = self.map_mgr.find_path()
         if not path:
-            print("yo'l topilmadi!")
+            print("no path found!")
             self._cleanup()
             return False
 
@@ -60,26 +60,26 @@ class AutonomousCar:
 
         waypoints = self.map_mgr.generate_waypoints()
         if not waypoints:
-            print("waypoint yaratilmadi!")
+            print("no waypoints generated!")
             self._cleanup()
             return False
 
         print("\n" + "=" * 50)
-        input("tayyor bo'lsa Enter bosing >>> ")
+        input("press Enter when ready >>> ")
 
-        print("\nnavigatsiya boshlandi!")
+        print("\nnavigation started!")
         success = self.navigator.navigate_waypoints(waypoints)
 
         if success:
-            print("\nmanzilga yetdik!")
+            print("\ndestination reached!")
         else:
-            print("\nnavigatsiya muvaffaqiyatsiz")
+            print("\nnavigation failed")
 
         self._cleanup()
         return success
 
     def _on_exit(self, sig, frame):
-        print("\nCtrl+C, to'xtayapman...")
+        print("\nCtrl+C, stopping...")
         if self.navigator:
             self.navigator.emergency_stop()
         self._cleanup()
@@ -91,7 +91,7 @@ class AutonomousCar:
 
 
 class SimulatedCommunicator:
-    """ESP32 yo'q bo'lganda test qilish uchun"""
+    """Used for testing when ESP32 is not available"""
 
     def __init__(self):
         self._heading = 0.0
@@ -152,7 +152,7 @@ class SimulatedCommunicator:
             self._enc_left += pulses
             self._enc_right += pulses
 
-            # ackermann burilish simulyatsiyasi
+            # Ackermann turn simulation
             if abs(self._steer_angle) > 1:
                 wheelbase = 1.8
                 rad = math.radians(self._steer_angle)
@@ -163,12 +163,12 @@ class SimulatedCommunicator:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Avtonom Mashina Robot")
-    parser.add_argument("map_file", help="xarita JSON fayli")
+    parser = argparse.ArgumentParser(description="Autonomous Car Robot")
+    parser.add_argument("map_file", help="map JSON file")
     parser.add_argument("--port", default=SERIAL_PORT, help="serial port")
     parser.add_argument("--baud", type=int, default=SERIAL_BAUD)
     parser.add_argument("--simulate", action="store_true",
-                        help="ESP32 siz sinov rejimi")
+                        help="test mode without ESP32")
     args = parser.parse_args()
 
     car = AutonomousCar(args.port, args.baud, args.simulate)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# web boshqaruv paneli - flask + socketio
+# web control panel - flask + socketio
 
 import os
 import sys
@@ -19,7 +19,7 @@ from map_manager import MapManager
 from navigator import Navigator
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'avtonom-mashina-2026'
+app.config['SECRET_KEY'] = 'autonomous-car-2026'
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 # Global State
@@ -84,22 +84,22 @@ def list_maps():
 @app.route('/api/map/upload', methods=['POST'])
 def upload_map():
     if 'file' not in request.files:
-        return jsonify({"error": "Fayl tanlanmadi"}), 400
+        return jsonify({"error": "No file selected"}), 400
     file = request.files['file']
     if file.filename == '':
-        return jsonify({"error": "Fayl nomi bo'sh"}), 400
+        return jsonify({"error": "Empty filename"}), 400
     if not file.filename.endswith('.json'):
-        return jsonify({"error": "Faqat .json fayllar"}), 400
+        return jsonify({"error": "Only .json files allowed"}), 400
     filepath = os.path.join(MAPS_DIR, file.filename)
     file.save(filepath)
     try:
         with open(filepath, 'r') as f:
             json.load(f)
-        add_log(f"Xarita yuklandi: {file.filename}", "success")
+        add_log(f"Map uploaded: {file.filename}", "success")
         return jsonify({"success": True, "filename": file.filename})
     except json.JSONDecodeError:
         os.remove(filepath)
-        return jsonify({"error": "Noto'g'ri JSON format"}), 400
+        return jsonify({"error": "Invalid JSON format"}), 400
 
 
 # ---- Socket.IO Events ----
@@ -117,7 +117,7 @@ def handle_load_map(data):
     filepath = os.path.join(MAPS_DIR, filename)
 
     if not os.path.exists(filepath):
-        emit('error', {"msg": f"Xarita topilmadi: {filename}"})
+        emit('error', {"msg": f"Map not found: {filename}"})
         return
 
     map_mgr = MapManager()
@@ -125,17 +125,17 @@ def handle_load_map(data):
         state["map_loaded"] = True
         state["map_name"] = filename
         state["path_found"] = False
-        add_log(f"Xarita yuklandi: {filename}", "success")
+        add_log(f"Map loaded: {filename}", "success")
         emit('map_data', get_map_state())
         emit('state', get_full_state())
     else:
-        emit('error', {"msg": "Xarita yuklanmadi"})
+        emit('error', {"msg": "Failed to load map"})
 
 
 @socketio.on('find_path')
 def handle_find_path():
     if not state["map_loaded"]:
-        emit('error', {"msg": "Avval xarita yuklang"})
+        emit('error', {"msg": "Load a map first"})
         return
 
     path = map_mgr.find_path()
@@ -144,12 +144,12 @@ def handle_find_path():
         state["path_found"] = True
         state["waypoints_total"] = len(waypoints)
         state["waypoints_done"] = 0
-        add_log(f"Yo'l topildi: {len(path)} qadam, {len(waypoints)} waypoint", "success")
+        add_log(f"Path found: {len(path)} steps, {len(waypoints)} waypoints", "success")
         emit('map_data', get_map_state())
         emit('state', get_full_state())
     else:
         state["path_found"] = False
-        add_log("Yo'l topilmadi!", "error")
+        add_log("No path found!", "error")
         emit('map_data', get_map_state())
         emit('state', get_full_state())
 
@@ -158,17 +158,17 @@ def handle_find_path():
 def handle_start_nav():
     global nav_thread, navigator
     if state["status"] == "navigating":
-        add_log("Navigatsiya allaqachon ishlayapti", "warn")
+        add_log("Navigation already running", "warn")
         return
     if not state["path_found"]:
-        add_log("Avval yo'l toping", "warn")
+        add_log("Find a path first", "warn")
         return
 
     navigator = Navigator(comm)
     state["status"] = "navigating"
     state["waypoints_done"] = 0
     socketio.emit('state', get_full_state())
-    add_log("Navigatsiya boshlandi!", "success")
+    add_log("Navigation started!", "success")
 
     nav_thread = threading.Thread(target=run_navigation, daemon=True)
     nav_thread.start()
@@ -181,7 +181,7 @@ def handle_stop_nav():
         navigator.stop()
     state["status"] = "idle"
     socketio.emit('state', get_full_state())
-    add_log("Navigatsiya to'xtatildi", "warn")
+    add_log("Navigation stopped", "warn")
 
 
 @socketio.on('emergency_stop')
@@ -193,7 +193,7 @@ def handle_emergency():
         comm.send_stop()
     state["status"] = "idle"
     socketio.emit('state', get_full_state())
-    add_log("FAVQULODDA TO'XTATISH!", "error")
+    add_log("EMERGENCY STOP!", "error")
 
 
 @socketio.on('manual_control')
@@ -221,7 +221,7 @@ def handle_manual_stop():
 def handle_reset_enc():
     if comm:
         comm.reset_encoders()
-    add_log("Encoderlar nollandi", "info")
+    add_log("Encoders reset", "info")
 
 
 # ---- Background Tasks ----
@@ -263,13 +263,13 @@ def run_navigation():
         if success:
             state["status"] = "idle"
             state["waypoints_done"] = state["waypoints_total"]
-            add_log("MANZILGA YETILDI!", "success")
+            add_log("DESTINATION REACHED!", "success")
         else:
             state["status"] = "idle"
-            add_log("Navigatsiya bekor qilindi", "warn")
+            add_log("Navigation cancelled", "warn")
     except Exception as e:
         state["status"] = "error"
-        add_log(f"Navigatsiya xatosi: {str(e)}", "error")
+        add_log(f"Navigation error: {str(e)}", "error")
     finally:
         if comm:
             comm.send_stop()
@@ -288,11 +288,11 @@ def telemetry_loop():
                     "rpm_left": round(t.rpm_left, 1),
                     "rpm_right": round(t.rpm_right, 1),
                     "distance": round(t.distance, 2),
-                    "dist_old_ong": round(t.dist_old_ong, 2),
-                    "dist_old_chap": round(t.dist_old_chap, 2),
-                    "dist_ong": round(t.dist_ong, 2),
-                    "dist_chap": round(t.dist_chap, 2),
-                    "dist_orqa": round(t.dist_orqa, 2),
+                    "dist_front_right": round(t.dist_front_right, 2),
+                    "dist_front_left": round(t.dist_front_left, 2),
+                    "dist_right": round(t.dist_right, 2),
+                    "dist_left": round(t.dist_left, 2),
+                    "dist_rear": round(t.dist_rear, 2),
                     "obstacle": t.obstacle_warning,
                 }
                 socketio.emit('telemetry', telemetry_data)
@@ -338,10 +338,10 @@ def get_map_state():
 def main():
     global comm, running, state, telemetry_thread
 
-    parser = argparse.ArgumentParser(description="Avtonom Mashina - Web UI")
+    parser = argparse.ArgumentParser(description="Autonomous Car - Web UI")
     parser.add_argument("--port", default=SERIAL_PORT, help="Serial port")
     parser.add_argument("--baud", type=int, default=SERIAL_BAUD, help="Baud rate")
-    parser.add_argument("--simulate", action="store_true", help="Simulyatsiya rejimi")
+    parser.add_argument("--simulate", action="store_true", help="Simulation mode")
     parser.add_argument("--host", default="0.0.0.0", help="Web server host")
     parser.add_argument("--web-port", type=int, default=5000, help="Web server port")
     args = parser.parse_args()
@@ -352,15 +352,15 @@ def main():
         from main import SimulatedCommunicator
         comm = SimulatedCommunicator()
         state["connected"] = True
-        add_log("Simulyatsiya rejimi faol", "info")
+        add_log("Simulation mode active", "info")
     else:
         comm = Communicator(args.port, args.baud, SERIAL_TIMEOUT)
         if comm.connect():
             state["connected"] = True
-            add_log(f"ESP32 ga ulandi: {args.port}", "success")
+            add_log(f"Connected to ESP32: {args.port}", "success")
         else:
             state["connected"] = False
-            add_log("ESP32 ga ulanib bo'lmadi!", "error")
+            add_log("Failed to connect to ESP32!", "error")
 
     telemetry_thread = threading.Thread(target=telemetry_loop, daemon=True)
     telemetry_thread.start()
@@ -376,7 +376,7 @@ def main():
     signal.signal(signal.SIGINT, shutdown)
 
     print(f"\n  Web UI: http://localhost:{args.web_port}")
-    print(f"  Rejim: {'Simulyatsiya' if args.simulate else 'Haqiqiy'}\n")
+    print(f"  Mode: {'Simulation' if args.simulate else 'Real'}\n")
 
     socketio.run(app, host=args.host, port=args.web_port,
                  allow_unsafe_werkzeug=True, debug=False)

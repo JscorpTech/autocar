@@ -46,12 +46,12 @@ class PIDController:
 class Navigator:
     def __init__(self, comm):
         self.comm = comm
-        # burilish PID: chiqishi rul burchagi (-30..+30)
+        # turning PID: output is steering angle (-30..+30)
         self.heading_pid = PIDController(
             TURN_PID_KP, TURN_PID_KI, TURN_PID_KD,
             -MAX_STEER_ANGLE, MAX_STEER_ANGLE
         )
-        # to'g'ri yurish PID: chiqishi rul tuzatish burchagi
+        # straight-line PID: output is steering correction angle
         self.straight_pid = PIDController(
             PID_KP, PID_KI, PID_KD,
             -MAX_STEER_ANGLE, MAX_STEER_ANGLE
@@ -65,7 +65,7 @@ class Navigator:
         self.current_waypoint_idx = 0
         total = len(waypoints)
 
-        print(f"\n[NAV] {total} ta waypoint")
+        print(f"\n[NAV] {total} waypoints")
 
         for idx, wp in enumerate(waypoints):
             if not self.running:
@@ -79,12 +79,12 @@ class Navigator:
             print(f"\n[NAV] waypoint {idx + 1}/{total}: "
                   f"{heading}°, {dist}m")
 
-            # avval burilamiz (ackermann ark bilan)
+            # turn first (Ackermann arc)
             if not self._turn_to_heading(heading):
                 self.comm.send_stop()
                 return False
 
-            # keyin to'g'ri haydaymiz
+            # then drive straight
             if not self._drive_distance(dist, heading):
                 self.comm.send_stop()
                 return False
@@ -93,14 +93,14 @@ class Navigator:
 
         self.comm.send_stop()
         self.running = False
-        print("\n[NAV] manzilga yetdik!")
+        print("\n[NAV] destination reached!")
         return True
 
     def _turn_to_heading(self, target):
         """
-        Ackermann burilish: mashina sekin oldinga yuradi,
-        rul to'liq burilgan holda. Agar joy yetishmasa,
-        orqaga qaytib yana urinadi (3-nuqtali burilish).
+        Ackermann turn: the car drives slowly forward with the wheels
+        fully turned. If space is insufficient, it backs up and tries
+        again (3-point turn, up to 5 attempts).
         """
         self.heading_pid.reset()
         t0 = time.time()
@@ -108,7 +108,7 @@ class Navigator:
         attempts = 0
 
         while self.running:
-            # umumiy 20 sekund timeout
+            # overall 20-second timeout
             if time.time() - t0 > 20:
                 print("  [TURN] timeout")
                 self.comm.send_stop()
@@ -123,30 +123,30 @@ class Navigator:
                 time.sleep(0.15)
                 return True
 
-            # old to'siq tekshiruvi (old, old-o'ng, old-chap sensorlar)
-            front_dist = min(telem.distance, telem.dist_old_ong, telem.dist_old_chap)
+            # front obstacle check (front, front-right, front-left sensors)
+            front_dist = min(telem.distance, telem.dist_front_right, telem.dist_front_left)
             if not reverse_mode and 0 < front_dist < OBSTACLE_DISTANCE:
                 reverse_mode = True
                 attempts += 1
                 if attempts > 5:
-                    print("  [TURN] joy yetishmayapti, bekor")
+                    print("  [TURN] not enough space, aborting")
                     self.comm.send_stop()
                     return False
-                print(f"  [TURN] to'siq, orqaga qaytamiz (urinish {attempts})")
+                print(f"  [TURN] obstacle, reversing (attempt {attempts})")
 
-            # rul burchagini PID bilan hisoblaymiz
+            # compute steering angle with PID
             steer = self.heading_pid.compute(err)
             steer = max(-MAX_STEER_ANGLE, min(MAX_STEER_ANGLE, steer))
 
             if reverse_mode:
-                # orqaga yurish, rul qarama-qarshi tomonga
+                # reverse with steering turned the opposite way
                 self.comm.send_drive(-TURN_SPEED, int(-steer))
                 time.sleep(0.8)
                 self.comm.send_drive(0, 0)
                 time.sleep(0.2)
                 reverse_mode = False
             else:
-                # oldinga sekin yurish, rul burilgan holda
+                # drive forward slowly with wheels turned
                 self.comm.send_drive(TURN_SPEED, int(steer))
 
             time.sleep(1.0 / COMMAND_RATE_HZ)
@@ -155,9 +155,9 @@ class Navigator:
 
     def _drive_distance(self, distance, target_heading):
         """
-        To'g'ri yurish: odometriya heading bo'yicha rul tuzatish bilan.
-        Ackermann mashinada burilish rul burchagi orqali bo'ladi,
-        differensial motor tezlik emas.
+        Drive straight: steering correction based on odometry heading.
+        On an Ackermann car, direction is controlled via steering angle,
+        not differential motor speed.
         """
         self.straight_pid.reset()
         self.comm.reset_encoders()
@@ -175,23 +175,23 @@ class Navigator:
 
             telem = self.comm.get_telemetry()
 
-            # to'siq tekshiruvi: old, old-o'ng, old-chap sensorlar
-            front_dist = min(telem.distance, telem.dist_old_ong, telem.dist_old_chap)
+            # obstacle check: front, front-right, front-left sensors
+            front_dist = min(telem.distance, telem.dist_front_right, telem.dist_front_left)
             if 0 < front_dist < OBSTACLE_DISTANCE:
-                print(f"  [DRIVE] to'siq! {front_dist:.2f}m")
+                print(f"  [DRIVE] obstacle! {front_dist:.2f}m")
                 self.comm.send_stop()
                 time.sleep(1)
                 retries = 0
                 while retries < 30:
                     telem = self.comm.get_telemetry()
-                    front_dist = min(telem.distance, telem.dist_old_ong, telem.dist_old_chap)
+                    front_dist = min(telem.distance, telem.dist_front_right, telem.dist_front_left)
                     if front_dist >= OBSTACLE_DISTANCE:
-                        print("  [DRIVE] to'siq ketdi")
+                        print("  [DRIVE] obstacle cleared")
                         break
                     retries += 1
                     time.sleep(0.5)
                 if retries >= 30:
-                    print("  [DRIVE] to'siq ketmadi")
+                    print("  [DRIVE] obstacle not cleared")
                     return False
                 continue
 
@@ -205,10 +205,10 @@ class Navigator:
 
             if traveled >= distance - WAYPOINT_REACHED / 2:
                 self.comm.send_drive(0, 0)
-                print(f"  [DRIVE] {traveled:.2f}m bosib o'tdik")
+                print(f"  [DRIVE] {traveled:.2f}m traveled")
                 return True
 
-            # odometriya heading xatosiga qarab rul tuzatamiz
+            # steering correction based on odometry heading error
             err = self._heading_error(telem.heading, target_heading)
             steer = self.straight_pid.compute(err)
             steer = max(-MAX_STEER_ANGLE, min(MAX_STEER_ANGLE, steer))
@@ -234,4 +234,4 @@ class Navigator:
     def emergency_stop(self):
         self.running = False
         self.comm.send_stop()
-        print("[NAV] FAVQULODDA TO'XTATISH")
+        print("[NAV] EMERGENCY STOP")
