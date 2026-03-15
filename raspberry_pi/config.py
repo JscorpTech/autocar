@@ -13,7 +13,8 @@ WHEEL_CIRCUMFERENCE = math.pi * WHEEL_DIAMETER
 WHEEL_BASE = 1.8        # old va orqa o'q orasidagi masofa
 PULSES_PER_REV = 4
 
-# rul (Ackermann)
+# rul (Ackermann) - BTS7960 rul motori boshqaruvi
+# steer_angle: -30..+30 daraja -> PWM proportsional ravishda o'zgaradi
 MAX_STEER_ANGLE = 30.0  # maksimal burilish burchagi, daraja
 MIN_TURN_RADIUS = WHEEL_BASE / math.tan(math.radians(MAX_STEER_ANGLE))
 # 1.8 / tan(30°) ≈ 3.12m
@@ -21,7 +22,7 @@ MIN_TURN_RADIUS = WHEEL_BASE / math.tan(math.radians(MAX_STEER_ANGLE))
 # xarita
 CELL_SIZE = 1.0
 
-# motor (PWM 0-255)
+# motor (PWM 0-255, BTS7960)
 BASE_SPEED = 150
 MIN_SPEED = 80
 MAX_SPEED = 220
@@ -46,7 +47,7 @@ WAYPOINT_REACHED = 0.15     # metr
 OBSTACLE_DISTANCE = 0.5     # metr
 COMMAND_RATE_HZ = 10
 
-# kompas yo'nalishlari
+# yo'nalishlar (odometriya asosida, shimol = 0°)
 NORTH = 0.0
 EAST = 90.0
 SOUTH = 180.0

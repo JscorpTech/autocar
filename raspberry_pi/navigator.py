@@ -123,8 +123,9 @@ class Navigator:
                 time.sleep(0.15)
                 return True
 
-            # to'siq bor, orqaga qaytamiz
-            if not reverse_mode and 0 < telem.distance < OBSTACLE_DISTANCE:
+            # old to'siq tekshiruvi (old, old-o'ng, old-chap sensorlar)
+            front_dist = min(telem.distance, telem.dist_old_ong, telem.dist_old_chap)
+            if not reverse_mode and 0 < front_dist < OBSTACLE_DISTANCE:
                 reverse_mode = True
                 attempts += 1
                 if attempts > 5:
@@ -154,7 +155,7 @@ class Navigator:
 
     def _drive_distance(self, distance, target_heading):
         """
-        To'g'ri yurish: kompas bo'yicha rul tuzatish bilan.
+        To'g'ri yurish: odometriya heading bo'yicha rul tuzatish bilan.
         Ackermann mashinada burilish rul burchagi orqali bo'ladi,
         differensial motor tezlik emas.
         """
@@ -174,15 +175,17 @@ class Navigator:
 
             telem = self.comm.get_telemetry()
 
-            # to'siq tekshiruvi
-            if 0 < telem.distance < OBSTACLE_DISTANCE:
-                print(f"  [DRIVE] to'siq! {telem.distance:.2f}m")
+            # to'siq tekshiruvi: old, old-o'ng, old-chap sensorlar
+            front_dist = min(telem.distance, telem.dist_old_ong, telem.dist_old_chap)
+            if 0 < front_dist < OBSTACLE_DISTANCE:
+                print(f"  [DRIVE] to'siq! {front_dist:.2f}m")
                 self.comm.send_stop()
                 time.sleep(1)
                 retries = 0
                 while retries < 30:
                     telem = self.comm.get_telemetry()
-                    if telem.distance >= OBSTACLE_DISTANCE:
+                    front_dist = min(telem.distance, telem.dist_old_ong, telem.dist_old_chap)
+                    if front_dist >= OBSTACLE_DISTANCE:
                         print("  [DRIVE] to'siq ketdi")
                         break
                     retries += 1
@@ -193,7 +196,7 @@ class Navigator:
                 continue
 
             for w in self.comm.get_warnings():
-                if w == "OBSTACLE":
+                if w in ("OBSTACLE", "OBSTACLE_REAR"):
                     self.comm.send_stop()
                     time.sleep(0.5)
 
@@ -205,7 +208,7 @@ class Navigator:
                 print(f"  [DRIVE] {traveled:.2f}m bosib o'tdik")
                 return True
 
-            # kompas xatosiga qarab rul tuzatamiz
+            # odometriya heading xatosiga qarab rul tuzatamiz
             err = self._heading_error(telem.heading, target_heading)
             steer = self.straight_pid.compute(err)
             steer = max(-MAX_STEER_ANGLE, min(MAX_STEER_ANGLE, steer))

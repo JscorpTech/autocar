@@ -288,6 +288,11 @@ def telemetry_loop():
                     "rpm_left": round(t.rpm_left, 1),
                     "rpm_right": round(t.rpm_right, 1),
                     "distance": round(t.distance, 2),
+                    "dist_old_ong": round(t.dist_old_ong, 2),
+                    "dist_old_chap": round(t.dist_old_chap, 2),
+                    "dist_ong": round(t.dist_ong, 2),
+                    "dist_chap": round(t.dist_chap, 2),
+                    "dist_orqa": round(t.dist_orqa, 2),
                     "obstacle": t.obstacle_warning,
                 }
                 socketio.emit('telemetry', telemetry_data)
