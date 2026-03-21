@@ -1,13 +1,21 @@
 // --- BTS7960 motors ---
 // front motors
-#define FRONT_RPWM   18
-#define FRONT_LPWM   19
+#define FRONT_RPWM      18
+#define FRONT_LPWM      19
 // rear motors
-#define REAR_RPWM    21
-#define REAR_LPWM    22
+#define REAR_RPWM       21
+#define REAR_LPWM       22
 // steering motor
-#define STEER_RPWM   26
-#define STEER_LPWM   27
+#define STEER_RPWM      26
+#define STEER_LPWM      27
+
+// --- LEDC PWM channels (one per motor pin) ---
+#define FRONT_RPWM_CH   0
+#define FRONT_LPWM_CH   1
+#define REAR_RPWM_CH    2
+#define REAR_LPWM_CH    3
+#define STEER_RPWM_CH   4
+#define STEER_LPWM_CH   5
 
 // --- HC-SR04 ultrasonic sensors (6 total) ---
 #define FRONT_TRIG        13
@@ -107,17 +115,17 @@ void IRAM_ATTR isr_RearLeft() {
 // BTS7960 motor control
 // =====================================================================
 
-void setBTS7960(int rpwmPin, int lpwmPin, int spd) {
+void setBTS7960(int rpwmCh, int lpwmCh, int spd) {
   spd = constrain(spd, -255, 255);
   if (spd > 0) {
-    ledcWrite(rpwmPin, spd);
-    ledcWrite(lpwmPin, 0);
+    ledcWrite(rpwmCh, spd);
+    ledcWrite(lpwmCh, 0);
   } else if (spd < 0) {
-    ledcWrite(rpwmPin, 0);
-    ledcWrite(lpwmPin, -spd);
+    ledcWrite(rpwmCh, 0);
+    ledcWrite(lpwmCh, -spd);
   } else {
-    ledcWrite(rpwmPin, 0);
-    ledcWrite(lpwmPin, 0);
+    ledcWrite(rpwmCh, 0);
+    ledcWrite(lpwmCh, 0);
   }
 }
 
@@ -125,8 +133,8 @@ void setMotors(int spd) {
   // front and rear motors at the same speed (Ackermann)
   spd = constrain(spd, -255, 255);
   driveSpeed = spd;
-  setBTS7960(FRONT_RPWM, FRONT_LPWM, spd);
-  setBTS7960(REAR_RPWM,  REAR_LPWM,  spd);
+  setBTS7960(FRONT_RPWM_CH, FRONT_LPWM_CH, spd);
+  setBTS7960(REAR_RPWM_CH,  REAR_LPWM_CH,  spd);
 }
 
 void setSteering(int angleDeg) {
@@ -135,7 +143,7 @@ void setSteering(int angleDeg) {
   angleDeg = constrain(angleDeg, -MAX_STEER, MAX_STEER);
   steerAngle = angleDeg;
   int pwm = (int)((float)angleDeg / (float)MAX_STEER * 255.0f);
-  setBTS7960(STEER_RPWM, STEER_LPWM, pwm);
+  setBTS7960(STEER_RPWM_CH, STEER_LPWM_CH, pwm);
 }
 
 void stopMotors() {
@@ -304,13 +312,19 @@ void setup() {
   Serial1.begin(RPI_BAUD, SERIAL_8N1, RPI_RX, RPI_TX);
 
   // BTS7960 drive motors PWM - 1kHz, 8-bit
-  ledcAttach(FRONT_RPWM, 1000, 8);
-  ledcAttach(FRONT_LPWM, 1000, 8);
-  ledcAttach(REAR_RPWM,  1000, 8);
-  ledcAttach(REAR_LPWM,  1000, 8);
+  ledcSetup(FRONT_RPWM_CH, 1000, 8);
+  ledcAttachPin(FRONT_RPWM, FRONT_RPWM_CH);
+  ledcSetup(FRONT_LPWM_CH, 1000, 8);
+  ledcAttachPin(FRONT_LPWM, FRONT_LPWM_CH);
+  ledcSetup(REAR_RPWM_CH,  1000, 8);
+  ledcAttachPin(REAR_RPWM,  REAR_RPWM_CH);
+  ledcSetup(REAR_LPWM_CH,  1000, 8);
+  ledcAttachPin(REAR_LPWM,  REAR_LPWM_CH);
   // BTS7960 steering motor PWM - 1kHz, 8-bit
-  ledcAttach(STEER_RPWM, 1000, 8);
-  ledcAttach(STEER_LPWM, 1000, 8);
+  ledcSetup(STEER_RPWM_CH, 1000, 8);
+  ledcAttachPin(STEER_RPWM, STEER_RPWM_CH);
+  ledcSetup(STEER_LPWM_CH, 1000, 8);
+  ledcAttachPin(STEER_LPWM, STEER_LPWM_CH);
   stopMotors();
 
   // Ultrasonic trigger/echo pins
