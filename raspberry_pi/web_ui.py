@@ -13,6 +13,7 @@ import threading
 from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO, emit
 
+from logger import setup_logging, get_logger
 from config import SERIAL_PORT, SERIAL_BAUD, SERIAL_TIMEOUT, BASE_SPEED
 from communicator import Communicator
 from map_manager import MapManager
@@ -338,6 +339,7 @@ def get_map_state():
 def main():
     global comm, running, state, telemetry_thread
 
+    setup_logging()
     parser = argparse.ArgumentParser(description="Autonomous Car - Web UI")
     parser.add_argument("--port", default=SERIAL_PORT, help="Serial port")
     parser.add_argument("--baud", type=int, default=SERIAL_BAUD, help="Baud rate")

@@ -5,6 +5,7 @@ import signal
 import argparse
 import time
 
+from logger import setup_logging
 from config import SERIAL_PORT, SERIAL_BAUD, SERIAL_TIMEOUT
 from communicator import Communicator
 from map_manager import MapManager
@@ -163,6 +164,7 @@ class SimulatedCommunicator:
 
 
 def main():
+    setup_logging()
     parser = argparse.ArgumentParser(description="Autonomous Car Robot")
     parser.add_argument("map_file", help="map JSON file")
     parser.add_argument("--port", default=SERIAL_PORT, help="serial port")

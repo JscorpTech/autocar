@@ -3,6 +3,10 @@ import threading
 import time
 from dataclasses import dataclass
 
+from logger import get_logger
+
+_log = get_logger("comm")
+
 
 @dataclass
 class TelemetryData:
@@ -32,6 +36,8 @@ class Communicator:
         self._running = False
         self._reader_thread = None
         self._warnings = []
+        self._rx_count = 0     # DATA packets received
+        self._tx_count = 0     # commands sent
 
     def connect(self):
         try:
@@ -41,6 +47,7 @@ class Communicator:
                 timeout=self.timeout,
                 write_timeout=1.0
             )
+            _log.info("Serial port opened: %s @ %d baud", self.port, self.baud)
             time.sleep(2)
             self.serial_conn.reset_input_buffer()
 
@@ -49,13 +56,16 @@ class Communicator:
             resp = self.serial_conn.readline().decode('utf-8', errors='ignore').strip()
 
             if resp == "PONG":
+                _log.info("ESP32 connected: %s", self.port)
                 print(f"[COMM] ESP32 connected: {self.port}")
             else:
+                _log.warning("Unexpected response to PING: %r", resp)
                 print(f"[COMM] response: '{resp}', continuing")
 
             self._start_reader()
             return True
         except serial.SerialException as e:
+            _log.error("Connection error: %s", e)
             print(f"[COMM] connection error: {e}")
             return False
 
@@ -66,6 +76,8 @@ class Communicator:
         self.send_drive(0, 0)
         if self.serial_conn and self.serial_conn.is_open:
             self.serial_conn.close()
+        _log.info("Disconnected from ESP32. RX packets: %d, TX commands: %d",
+                  self._rx_count, self._tx_count)
 
     def send_drive(self, speed, steer_angle):
         """speed: -255..255, steer_angle: -30..+30 degrees"""
@@ -83,7 +95,10 @@ class Communicator:
         if self.serial_conn and self.serial_conn.is_open:
             try:
                 self.serial_conn.write(data.encode('utf-8'))
+                self._tx_count += 1
+                _log.debug("TX → %s", data.strip())
             except serial.SerialException as e:
+                _log.error("Write error: %s", e)
                 print(f"[COMM] write error: {e}")
 
     def get_telemetry(self):
@@ -121,12 +136,14 @@ class Communicator:
                 if self.serial_conn and self.serial_conn.in_waiting > 0:
                     line = self.serial_conn.readline().decode('utf-8', errors='ignore').strip()
                     if line:
+                        _log.debug("RX ← %s", line)
                         self._parse_line(line)
                 else:
                     time.sleep(0.01)
             except serial.SerialException:
                 time.sleep(0.1)
             except Exception as e:
+                _log.error("Read error: %s", e)
                 print(f"[COMM] read error: {e}")
                 time.sleep(0.1)
 
@@ -149,8 +166,9 @@ class Communicator:
                         self.telemetry.dist_rear        = float(parts[10]) if len(parts) > 10 else 999.0
                         self.telemetry.timestamp     = time.time()
                         self.telemetry.obstacle_warning = False
+                    self._rx_count += 1
             except (ValueError, IndexError):
-                pass
+                _log.warning("Malformed DATA packet: %s", line)
 
         elif line.startswith("WARN:"):
             warning = line[5:]
@@ -158,7 +176,8 @@ class Communicator:
                 self._warnings.append(warning)
                 if warning == "OBSTACLE":
                     self.telemetry.obstacle_warning = True
+            _log.warning("ESP32 warning: %s", warning)
             print(f"[COMM] warning: {warning}")
 
         elif line.startswith("ACK:"):
-            pass
+            _log.info("ESP32 ACK: %s", line[4:])
