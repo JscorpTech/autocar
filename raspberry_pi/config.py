@@ -1,4 +1,10 @@
+import logging
 import math
+import os
+
+# logging
+LOG_DIR   = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+LOG_LEVEL = logging.DEBUG
 
 # serial
 SERIAL_PORT = "/dev/ttyUSB0"
