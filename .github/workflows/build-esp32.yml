@@ -1,0 +1,33 @@
+name: Build ESP32 Firmware
+
+on:
+  push:
+    paths:
+      - 'esp32/**'
+  pull_request:
+    paths:
+      - 'esp32/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio/.cache
+          key: ${{ runner.os }}-pio-${{ hashFiles('esp32/**') }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Build ESP32-S3 firmware
+        run: pio run
+        working-directory: esp32/car_controller
