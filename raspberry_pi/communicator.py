@@ -94,9 +94,9 @@ class Communicator:
                   self._rx_count, self._tx_count)
 
     def send_drive(self, speed, steer_angle):
-        """speed: -255..255, steer_angle: -30..+30 degrees"""
+        """speed: -255..255, steer_angle: -25..+25 degrees"""
         speed = max(-255, min(255, int(speed)))
-        steer_angle = max(-30, min(30, int(steer_angle)))
+        steer_angle = max(-25, min(25, int(steer_angle)))
         self.send_raw(f"CMD:{speed},{steer_angle}\n")
 
     def send_stop(self):

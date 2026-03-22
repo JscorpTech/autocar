@@ -13,21 +13,21 @@ SERIAL_TIMEOUT = 0.1
 
 # car dimensions
 CAR_LENGTH = 2.0        # length, metres
-CAR_WIDTH = 1.0         # width, metres
-WHEEL_DIAMETER = 0.28   # diameter, metres (radius 14cm)
-WHEEL_CIRCUMFERENCE = math.pi * WHEEL_DIAMETER  # ~0.8796m
-WHEEL_BASE = 1.8        # distance between front and rear axles, metres
-PULSES_PER_REV = 100    # LM393 encoder: 100 pulses/revolution (50-slot disc)
-# m_per_pulse = 0.8796 / 100 ~= 0.008796m (8.8mm) — high precision
+CAR_WIDTH = 0.75        # track width (wheel-to-wheel), metres
+WHEEL_DIAMETER = 0.35   # diameter, metres
+WHEEL_CIRCUMFERENCE = math.pi * WHEEL_DIAMETER  # ~1.0996m
+WHEEL_BASE = 0.95       # distance between front and rear axles, metres
+PULSES_PER_REV = 18     # LM393 encoder: 18 pulses/revolution
+# m_per_pulse = 1.0996 / 18 ~= 0.0611m (61mm per pulse)
 
 # steering (Ackermann) - BTS7960 steering motor control
-# steer_angle: -30..+30 degrees -> PWM changes proportionally
-MAX_STEER_ANGLE = 30.0  # maximum steering angle, degrees
+# steer_angle: -25..+25 degrees -> PWM changes proportionally
+MAX_STEER_ANGLE = 25.0  # maximum steering angle, degrees
 MIN_TURN_RADIUS = WHEEL_BASE / math.tan(math.radians(MAX_STEER_ANGLE))
-# 1.8 / tan(30deg) ~= 3.12m
+# 0.95 / tan(25deg) ~= 2.04m
 
 # map
-CELL_SIZE = 1.0  # metres per cell (use >= 3.5m for real turns)
+CELL_SIZE = 1.0  # metres per cell (use >= 2.5m for real turns)
 
 # motor (PWM 0-255, BTS7960)
 BASE_SPEED = 150

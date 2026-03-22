@@ -187,8 +187,8 @@ class SimulatedCommunicator:
             if self._steer_angle < 0:
                 dTheta = -dTheta  # left turn = negative
 
-            # Outer and inner arcs (half width = CAR_WIDTH/2 = 0.5m)
-            half_width = 0.5  # metres
+            # Outer and inner arcs (half track width = CAR_WIDTH/2 = 0.375m)
+            half_width = 0.375  # metres (CAR_WIDTH=0.75m)
             outer_arc = abs(arc) * (turn_radius + half_width) / turn_radius
             inner_arc = abs(arc) * max(0.0, turn_radius - half_width) / turn_radius
 

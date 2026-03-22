@@ -65,11 +65,11 @@
 #define RPI_BAUD  115200
 
 // --- Car parameters ---
-#define PULSES_PER_REV  100      // Encoder: 100 pulses/revolution (50-slot disc)
-#define DEBOUNCE_MS     2        // 2ms: at 1m/s ~8.8ms interval, safe
-#define WHEEL_CIRC      0.8796f  // FIXED: PI*0.28m (radius 14cm)
-#define WHEEL_BASE      1.8f     // front-rear axle distance, metres
-#define MAX_STEER       30       // maximum steering angle, degrees
+#define PULSES_PER_REV  18       // Encoder: 18 pulses/revolution (measured)
+#define DEBOUNCE_MS     5        // 5ms: at 1m/s ~61ms interval, safe
+#define WHEEL_CIRC      1.0996f  // PI*0.35m (diameter 35cm)
+#define WHEEL_BASE      0.95f    // front-rear axle distance, metres
+#define MAX_STEER       25       // maximum steering angle, degrees
 
 // --- Communication and safety ---
 #define DATA_INTERVAL   100      // telemetry send interval, ms
@@ -440,7 +440,7 @@ void setup() {
   Serial.println("Car ready (BTS7960 + 6x HC-SR04 + 4x LM393)");
   Serial.print  ("Heading source: ");
   Serial.println(compassOk ? "HMC5883L compass" : "Odometry");
-  Serial.println("WHEEL_CIRC=0.8796m PULSES=100 DEBOUNCE=2ms ODO=50ms");
+  Serial.println("WHEEL_CIRC=1.0996m PULSES=18 DEBOUNCE=5ms ODO=50ms");
   Serial.println("DEBUG=" + String(DEBUG ? "ON" : "OFF"));
   Serial.println("Waiting for Raspberry Pi commands...");
   Serial.println("=================================");

@@ -75,7 +75,13 @@ Access at `http://localhost:5000` (default).
 `1` = passable, `0` = obstacle.
 
 ## Key Configuration (`config.py`)
-- `WHEEL_DIAMETER = 0.28` — radius 14cm = diameter 28cm → circumference ≈ 0.8796m
+- `WHEEL_DIAMETER = 0.35` — diameter 35cm → circumference ≈ 1.0996m
+- `PULSES_PER_REV = 18` — 18 signals per full wheel revolution
+- `m_per_pulse` ≈ 0.0611m (61mm per pulse)
+- `WHEEL_BASE = 0.95` — front-rear axle distance 95cm
+- `CAR_WIDTH = 0.75` — track width (wheel-to-wheel) 75cm
+- `MAX_STEER_ANGLE = 25.0°` — real measured steering limit
+- `MIN_TURN_RADIUS` ≈ 2.04m (use CELL_SIZE ≥ 2.5m in maps)
 - `OBSTACLE_DISTANCE = 0.5` — emergency stop threshold in meters
 - `BASE_SPEED = 150`, `TURN_SPEED = 100` — PWM values (0–255)
 - `HEADING_TOLERANCE = 5.0°`, `TURN_TIMEOUT_SEC = 30.0`
