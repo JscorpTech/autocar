@@ -14,7 +14,7 @@
 
 // DEBUG mode: false = clean serial (only DATA/WARN/ACK for Raspberry Pi)
 // Set true only when debugging with Arduino IDE Serial Monitor (Pi disconnected)
-#define DEBUG false
+#define DEBUG true
 #define DPRINT(x)   if(DEBUG) { Serial.print(millis()); Serial.print("ms | "); Serial.print(x); }
 #define DPRINTLN(x) if(DEBUG) { Serial.print(millis()); Serial.print("ms | "); Serial.println(x); }
 
