@@ -1,15 +1,15 @@
 // =====================================================================
-// Autonomous Car - ESP32-S3 Firmware
-// BTS7960 motors + 6x HC-SR04 + 4x LM393 + HMC5883L compass
+// Autonomous Car - ESP32 Firmware
+// BTS7960 motors + 6x HC-SR04 + 4x LM393, odometry heading
 //
-// Critical fixes:
-//  - WHEEL_CIRC: 0.8796m (radius 14cm = diameter 28cm)
-//  - DEBOUNCE_MS: 2ms (prevents pulse loss at speed)
-//  - Odometry: 50ms update (was 200ms)
-//  - RESET_ENC: only resets encoders, heading NOT reset
+// Key parameters:
+//  - WHEEL_CIRC: 1.0996m (diameter 35cm)
+//  - PULSES_PER_REV: 18
+//  - DEBOUNCE_MS: 5ms
+//  - Odometry: 50ms update
+//  - RESET_ENC: heading NOT reset (critical fix)
 //  - 3 front sensors checked for obstacle
 //  - Buffer overflow protection (MAX_CMD_LEN = 64)
-//  - HMC5883L compass (if not connected, odometry heading used)
 // =====================================================================
 
 // DEBUG mode: false = clean serial (only DATA/WARN/ACK for Raspberry Pi)
@@ -18,15 +18,7 @@
 #define DPRINT(x)   if(DEBUG) { Serial.print(millis()); Serial.print("ms | "); Serial.print(x); }
 #define DPRINTLN(x) if(DEBUG) { Serial.print(millis()); Serial.print("ms | "); Serial.println(x); }
 
-#include <Wire.h>
-#include <Adafruit_Sensor.h>
-#include <Adafruit_HMC5883_U.h>
-
-// --- I2C (HMC5883L compass) ---
-#define I2C_SDA   8
-#define I2C_SCL   9
-// Tashkent magnetic declination: ~+5 degrees
-#define DECLINATION_DEG  5.0f
+// HMC5883L compass removed — using odometry heading only
 
 // --- BTS7960 motors ---
 // front motors
@@ -84,26 +76,6 @@
 #define OBSTACLE_DIST_M 0.5f     // obstacle detection distance, metres
 #define ULTRA_TIMEOUT   20000    // pulseIn timeout, us (~3.4m)
 #define MAX_CMD_LEN     64       // buffer overflow protection
-
-
-// =====================================================================
-// Compass (HMC5883L)
-// =====================================================================
-Adafruit_HMC5883_Unified compass = Adafruit_HMC5883_Unified(12345);
-bool compassOk = false;
-// headingSource: 0 = odometry, 1 = compass
-uint8_t headingSource = 0;
-
-float readCompass() {
-  if (!compassOk) return -1.0f;
-  sensors_event_t event;
-  compass.getEvent(&event);
-  float h = atan2f(event.magnetic.y, event.magnetic.x);
-  h += DECLINATION_DEG * (PI / 180.0f);
-  if (h < 0) h += 2.0f * PI;
-  if (h > 2.0f * PI) h -= 2.0f * PI;
-  return h * (180.0f / PI);
-}
 
 
 // =====================================================================
@@ -270,21 +242,13 @@ void updateOdometry() {
   rpmLeft  = ((dFL + dRL) / 2.0f) * base;
   rpmRight = ((dFR + dRR) / 2.0f) * base;
 
-  if (headingSource == 1) {
-    // Compass available: absolute heading (no drift)
-    float compassH = readCompass();
-    if (compassH >= 0.0f) {
-      heading = compassH;
-    }
-  } else {
-    // Odometry only: relative heading
-    float mpp    = WHEEL_CIRC / (float)PULSES_PER_REV;
-    float dLeft  = ((dFL + dRL) / 2.0f) * mpp;
-    float dRight = ((dFR + dRR) / 2.0f) * mpp;
-    if (driveSpeed < 0) { dLeft = -dLeft; dRight = -dRight; }
-    float dTheta = (dRight - dLeft) / WHEEL_BASE * (180.0f / PI);
-    heading = fmod(heading + dTheta + 360.0f, 360.0f);
-  }
+  // Odometry heading
+  float mpp    = WHEEL_CIRC / (float)PULSES_PER_REV;
+  float dLeft  = ((dFL + dRL) / 2.0f) * mpp;
+  float dRight = ((dFR + dRR) / 2.0f) * mpp;
+  if (driveSpeed < 0) { dLeft = -dLeft; dRight = -dRight; }
+  float dTheta = (dRight - dLeft) / WHEEL_BASE * (180.0f / PI);
+  heading = fmod(heading + dTheta + 360.0f, 360.0f);
 
   lastRpmTime = now;
 }
@@ -393,19 +357,6 @@ void sendTelemetry() {
 void setup() {
   Serial.begin(RPI_BAUD);  // USB Serial — both debug and Raspberry Pi communication
 
-  // HMC5883L compass (I2C: SDA=8, SCL=9)
-  Wire.begin(I2C_SDA, I2C_SCL);
-  compassOk = compass.begin();
-  if (compassOk) {
-    headingSource = 1;
-    float initH = readCompass();
-    if (initH >= 0.0f) heading = initH;
-    Serial.println("Compass: OK - absolute heading in use");
-  } else {
-    headingSource = 0;
-    Serial.println("Compass: NOT FOUND - odometry heading in use");
-  }
-
   // BTS7960 drive motors PWM - 1kHz, 8-bit (ESP32 core 2.x API)
   ledcSetup(CH_FRONT_RPWM, 1000, 8); ledcAttachPin(FRONT_RPWM, CH_FRONT_RPWM);
   ledcSetup(CH_FRONT_LPWM, 1000, 8); ledcAttachPin(FRONT_LPWM, CH_FRONT_LPWM);
@@ -444,8 +395,7 @@ void setup() {
 
   Serial.println("=================================");
   Serial.println("Car ready (BTS7960 + 6x HC-SR04 + 4x LM393)");
-  Serial.print  ("Heading source: ");
-  Serial.println(compassOk ? "HMC5883L compass" : "Odometry");
+  Serial.println("Heading source: Odometry");
   Serial.println("WHEEL_CIRC=1.0996m PULSES=18 DEBOUNCE=5ms ODO=50ms");
   Serial.println("DEBUG=" + String(DEBUG ? "ON" : "OFF"));
   Serial.println("Waiting for Raspberry Pi commands...");
