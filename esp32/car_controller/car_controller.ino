@@ -63,6 +63,14 @@
 // Uses USB Serial (UART0) — connect Pi via USB cable (/dev/ttyUSB0 or /dev/ttyACM0)
 #define RPI_BAUD  115200
 
+// --- PWM channels for BTS7960 (ESP32 Arduino core 2.x API) ---
+#define CH_FRONT_RPWM  0
+#define CH_FRONT_LPWM  1
+#define CH_REAR_RPWM   2
+#define CH_REAR_LPWM   3
+#define CH_STEER_RPWM  4
+#define CH_STEER_LPWM  5
+
 // --- Car parameters ---
 #define PULSES_PER_REV  18       // Encoder: 18 pulses/revolution (measured)
 #define DEBOUNCE_MS     5        // 5ms: at 1m/s ~61ms interval, safe
@@ -162,17 +170,17 @@ void IRAM_ATTR isr_RearLeft() {
 // BTS7960 motor control
 // =====================================================================
 
-void setBTS7960(int rpwmPin, int lpwmPin, int spd) {
+void setBTS7960(int rpwmCh, int lpwmCh, int spd) {
   spd = constrain(spd, -255, 255);
   if (spd > 0) {
-    ledcWrite(rpwmPin, spd);
-    ledcWrite(lpwmPin, 0);
+    ledcWrite(rpwmCh, spd);
+    ledcWrite(lpwmCh, 0);
   } else if (spd < 0) {
-    ledcWrite(rpwmPin, 0);
-    ledcWrite(lpwmPin, -spd);
+    ledcWrite(rpwmCh, 0);
+    ledcWrite(lpwmCh, -spd);
   } else {
-    ledcWrite(rpwmPin, 0);
-    ledcWrite(lpwmPin, 0);
+    ledcWrite(rpwmCh, 0);
+    ledcWrite(lpwmCh, 0);
   }
 }
 
@@ -180,18 +188,18 @@ void setMotors(int spd) {
   // front and rear motors at the same speed (Ackermann)
   spd = constrain(spd, -255, 255);
   driveSpeed = spd;
-  setBTS7960(FRONT_RPWM, FRONT_LPWM, spd);
-  setBTS7960(REAR_RPWM,  REAR_LPWM,  spd);
+  setBTS7960(CH_FRONT_RPWM, CH_FRONT_LPWM, spd);
+  setBTS7960(CH_REAR_RPWM,  CH_REAR_LPWM,  spd);
   DPRINT("MOTOR spd="); DPRINTLN(spd);
 }
 
 void setSteering(int angleDeg) {
   // angleDeg: -MAX_STEER..+MAX_STEER (negative=left, positive=right)
-  // Proportional PWM: -30 -> -255, 0 -> 0, +30 -> +255
+  // Proportional PWM: -20 -> -255, 0 -> 0, +20 -> +255
   angleDeg = constrain(angleDeg, -MAX_STEER, MAX_STEER);
   steerAngle = angleDeg;
   int pwm = (int)((float)angleDeg / (float)MAX_STEER * 255.0f);
-  setBTS7960(STEER_RPWM, STEER_LPWM, pwm);
+  setBTS7960(CH_STEER_RPWM, CH_STEER_LPWM, pwm);
   DPRINT("STEER angle="); DPRINT(angleDeg); DPRINT(" pwm="); DPRINTLN(pwm);
 }
 
@@ -398,14 +406,14 @@ void setup() {
     Serial.println("Compass: NOT FOUND - odometry heading in use");
   }
 
-  // BTS7960 drive motors PWM - 1kHz, 8-bit
-  ledcAttach(FRONT_RPWM, 1000, 8);
-  ledcAttach(FRONT_LPWM, 1000, 8);
-  ledcAttach(REAR_RPWM,  1000, 8);
-  ledcAttach(REAR_LPWM,  1000, 8);
+  // BTS7960 drive motors PWM - 1kHz, 8-bit (ESP32 core 2.x API)
+  ledcSetup(CH_FRONT_RPWM, 1000, 8); ledcAttachPin(FRONT_RPWM, CH_FRONT_RPWM);
+  ledcSetup(CH_FRONT_LPWM, 1000, 8); ledcAttachPin(FRONT_LPWM, CH_FRONT_LPWM);
+  ledcSetup(CH_REAR_RPWM,  1000, 8); ledcAttachPin(REAR_RPWM,  CH_REAR_RPWM);
+  ledcSetup(CH_REAR_LPWM,  1000, 8); ledcAttachPin(REAR_LPWM,  CH_REAR_LPWM);
   // BTS7960 steering motor PWM - 1kHz, 8-bit
-  ledcAttach(STEER_RPWM, 1000, 8);
-  ledcAttach(STEER_LPWM, 1000, 8);
+  ledcSetup(CH_STEER_RPWM, 1000, 8); ledcAttachPin(STEER_RPWM, CH_STEER_RPWM);
+  ledcSetup(CH_STEER_LPWM, 1000, 8); ledcAttachPin(STEER_LPWM, CH_STEER_LPWM);
   stopMotors();
 
   // Ultrasonic trigger/echo pins
