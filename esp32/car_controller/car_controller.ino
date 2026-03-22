@@ -1,3 +1,33 @@
+// =====================================================================
+// Autonomous Car - ESP32-S3 Firmware
+// BTS7960 motors + 6x HC-SR04 + 4x LM393 + HMC5883L compass
+//
+// Critical fixes:
+//  - WHEEL_CIRC: 0.8796m (radius 14cm = diameter 28cm)
+//  - DEBOUNCE_MS: 2ms (prevents pulse loss at speed)
+//  - Odometry: 50ms update (was 200ms)
+//  - RESET_ENC: only resets encoders, heading NOT reset
+//  - 3 front sensors checked for obstacle
+//  - Buffer overflow protection (MAX_CMD_LEN = 64)
+//  - HMC5883L compass (if not connected, odometry heading used)
+// =====================================================================
+
+// DEBUG mode: true = verbose log on Serial Monitor
+// Arduino IDE → Tools → Serial Monitor → 115200 baud
+#define DEBUG true
+#define DPRINT(x)   if(DEBUG) { Serial.print(millis()); Serial.print("ms | "); Serial.print(x); }
+#define DPRINTLN(x) if(DEBUG) { Serial.print(millis()); Serial.print("ms | "); Serial.println(x); }
+
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_HMC5883_U.h>
+
+// --- I2C (HMC5883L compass) ---
+#define I2C_SDA   8
+#define I2C_SCL   9
+// Tashkent magnetic declination: ~+5 degrees
+#define DECLINATION_DEG  5.0f
+
 // --- BTS7960 motors ---
 // front motors
 #define FRONT_RPWM      18
@@ -34,18 +64,44 @@
 #define RPI_RX    44
 #define RPI_BAUD  115200
 
-#define PULSES_PER_REV  4
-#define DEBOUNCE_MS     10
-#define WHEEL_CIRC      0.785f   // PI * 0.25m
-#define WHEEL_BASE      1.8f     // metres
-#define MAX_STEER       30       // maximum steering angle (degrees)
+// --- Car parameters ---
+#define PULSES_PER_REV  100      // Encoder: 100 pulses/revolution (50-slot disc)
+#define DEBOUNCE_MS     2        // 2ms: at 1m/s ~8.8ms interval, safe
+#define WHEEL_CIRC      0.8796f  // FIXED: PI*0.28m (radius 14cm)
+#define WHEEL_BASE      1.8f     // front-rear axle distance, metres
+#define MAX_STEER       30       // maximum steering angle, degrees
 
-#define DATA_INTERVAL   100
-#define CMD_TIMEOUT     2000
-#define OBSTACLE_DIST_M 0.5f
-#define ULTRA_TIMEOUT   20000    // 20ms -> ~3.4m max range
+// --- Communication and safety ---
+#define DATA_INTERVAL   100      // telemetry send interval, ms
+#define CMD_TIMEOUT     2000     // stop if no command received, ms
+#define OBSTACLE_DIST_M 0.5f     // obstacle detection distance, metres
+#define ULTRA_TIMEOUT   20000    // pulseIn timeout, us (~3.4m)
+#define MAX_CMD_LEN     64       // buffer overflow protection
 
-// --- encoder variables ---
+
+// =====================================================================
+// Compass (HMC5883L)
+// =====================================================================
+Adafruit_HMC5883_Unified compass = Adafruit_HMC5883_Unified(12345);
+bool compassOk = false;
+// headingSource: 0 = odometry, 1 = compass
+uint8_t headingSource = 0;
+
+float readCompass() {
+  if (!compassOk) return -1.0f;
+  sensors_event_t event;
+  compass.getEvent(&event);
+  float h = atan2f(event.magnetic.y, event.magnetic.x);
+  h += DECLINATION_DEG * (PI / 180.0f);
+  if (h < 0) h += 2.0f * PI;
+  if (h > 2.0f * PI) h -= 2.0f * PI;
+  return h * (180.0f / PI);
+}
+
+
+// =====================================================================
+// Encoder variables
+// =====================================================================
 volatile unsigned long encFrontRight = 0;
 volatile unsigned long encFrontLeft  = 0;
 volatile unsigned long encRearRight  = 0;
@@ -57,13 +113,13 @@ volatile unsigned long lastPulseRL   = 0;
 unsigned long prevEncFR = 0, prevEncFL = 0;
 unsigned long prevEncRR = 0, prevEncRL = 0;
 
-// --- RPM and heading ---
+// RPM and heading
 unsigned long lastRpmTime = 0;
 float rpmLeft  = 0.0;
 float rpmRight = 0.0;
-float heading  = 0.0;   // odometry-based, degrees
+float heading  = 0.0;   // current heading, degrees [0..360)
 
-// --- distances ---
+// Distances
 float distFront      = 999.0;
 float distFrontRight = 999.0;
 float distFrontLeft  = 999.0;
@@ -71,18 +127,18 @@ float distRight      = 999.0;
 float distLeft       = 999.0;
 float distRear       = 999.0;
 
-// --- haydash holati ---
+// Drive state
 int driveSpeed = 0;
 int steerAngle = 0;   // -MAX_STEER..+MAX_STEER degrees
 
-// --- aloqa ---
+// Communication
 String inputBuf = "";
 unsigned long lastDataSend = 0;
 unsigned long lastCmdTime  = 0;
 
 
 // =====================================================================
-// ISR - encoder pulses
+// ISR - encoder pulses (FIXED: DEBOUNCE_MS = 2)
 // =====================================================================
 
 void IRAM_ATTR isr_FrontRight() {
@@ -127,6 +183,7 @@ void setMotors(int spd) {
   driveSpeed = spd;
   setBTS7960(FRONT_RPWM, FRONT_LPWM, spd);
   setBTS7960(REAR_RPWM,  REAR_LPWM,  spd);
+  DPRINT("MOTOR spd="); DPRINTLN(spd);
 }
 
 void setSteering(int angleDeg) {
@@ -136,6 +193,7 @@ void setSteering(int angleDeg) {
   steerAngle = angleDeg;
   int pwm = (int)((float)angleDeg / (float)MAX_STEER * 255.0f);
   setBTS7960(STEER_RPWM, STEER_LPWM, pwm);
+  DPRINT("STEER angle="); DPRINT(angleDeg); DPRINT(" pwm="); DPRINTLN(pwm);
 }
 
 void stopMotors() {
@@ -143,6 +201,7 @@ void stopMotors() {
   setSteering(0);
   driveSpeed = 0;
   steerAngle = 0;
+  DPRINTLN("STOP");
 }
 
 
@@ -158,7 +217,7 @@ float readUltrasonic(int trigPin, int echoPin) {
   digitalWrite(trigPin, LOW);
   long dur = pulseIn(echoPin, HIGH, ULTRA_TIMEOUT);
   if (dur == 0) return 999.0f;
-  return (dur * 0.0343f / 2.0f) / 100.0f;   // convert to metres
+  return (dur * 0.0343f / 2.0f) / 100.0f;   // cm -> metres
 }
 
 // Read sensors one at a time (round-robin to reduce blocking)
@@ -178,12 +237,14 @@ void updateNextSensor() {
 
 // =====================================================================
 // Odometry: RPM and heading calculation
+// Compass has priority. If not connected, use odometry.
+// FIXED: 200ms -> 50ms update interval
 // =====================================================================
 
 void updateOdometry() {
   unsigned long now = millis();
   unsigned long elapsed = now - lastRpmTime;
-  if (elapsed < 200) return;
+  if (elapsed < 50) return;
 
   noInterrupts();
   unsigned long fR = encFrontRight, fL = encFrontLeft;
@@ -202,15 +263,21 @@ void updateOdometry() {
   rpmLeft  = ((dFL + dRL) / 2.0f) * base;
   rpmRight = ((dFR + dRR) / 2.0f) * base;
 
-  // Differential odometry heading update.
-  // Encoder pulses always count positively, so reverse-travel
-  // distance sign is applied manually when driving backwards.
-  float mpp    = WHEEL_CIRC / (float)PULSES_PER_REV;
-  float dLeft  = ((dFL + dRL) / 2.0f) * mpp;
-  float dRight = ((dFR + dRR) / 2.0f) * mpp;
-  if (driveSpeed < 0) { dLeft = -dLeft; dRight = -dRight; }
-  float dTheta = (dRight - dLeft) / WHEEL_BASE * (180.0f / PI);
-  heading = fmod(heading + dTheta + 360.0f, 360.0f);
+  if (headingSource == 1) {
+    // Compass available: absolute heading (no drift)
+    float compassH = readCompass();
+    if (compassH >= 0.0f) {
+      heading = compassH;
+    }
+  } else {
+    // Odometry only: relative heading
+    float mpp    = WHEEL_CIRC / (float)PULSES_PER_REV;
+    float dLeft  = ((dFL + dRL) / 2.0f) * mpp;
+    float dRight = ((dFR + dRR) / 2.0f) * mpp;
+    if (driveSpeed < 0) { dLeft = -dLeft; dRight = -dRight; }
+    float dTheta = (dRight - dLeft) / WHEEL_BASE * (180.0f / PI);
+    heading = fmod(heading + dTheta + 360.0f, 360.0f);
+  }
 
   lastRpmTime = now;
 }
@@ -224,8 +291,9 @@ void processCommand(String cmd) {
   cmd.trim();
   lastCmdTime = millis();
 
+  DPRINT("CMD_IN: ["); DPRINT(cmd); DPRINTLN("]");
+
   if (cmd.startsWith("CMD:")) {
-    // CMD:speed,steer_angle
     String params = cmd.substring(4);
     int idx = params.indexOf(',');
     if (idx > 0) {
@@ -233,6 +301,8 @@ void processCommand(String cmd) {
       int angle = constrain(params.substring(idx + 1).toInt(), -MAX_STEER, MAX_STEER);
       setMotors(spd);
       setSteering(angle);
+    } else {
+      DPRINTLN("CMD error: comma not found");
     }
   }
   else if (cmd == "STOP") {
@@ -240,25 +310,39 @@ void processCommand(String cmd) {
   }
   else if (cmd == "PING") {
     Serial1.println("PONG");
+    DPRINTLN("PING -> PONG sent");
   }
   else if (cmd == "RESET_ENC") {
     noInterrupts();
     encFrontRight = encFrontLeft = encRearRight = encRearLeft = 0;
     prevEncFR     = prevEncFL   = prevEncRR    = prevEncRL   = 0;
     interrupts();
-    heading = 0.0f;
+    // CRITICAL FIX: heading is NOT reset here — resetting it caused
+    // the car to steer hard throughout entire drive after encoder reset
     Serial1.println("ACK:RESET_ENC");
+    DPRINT("RESET_ENC ok, heading="); DPRINTLN(heading);
+  }
+  else {
+    DPRINT("Unknown command: "); DPRINTLN(cmd);
   }
 }
 
 void readCommands() {
   while (Serial1.available()) {
     char c = Serial1.read();
-    if (c == '\n') {
-      processCommand(inputBuf);
-      inputBuf = "";
+    if (c == '\n' || c == '\r') {
+      if (inputBuf.length() > 0) {
+        processCommand(inputBuf);
+        inputBuf = "";
+      }
     } else {
-      inputBuf += c;
+      // Buffer overflow protection
+      if (inputBuf.length() < MAX_CMD_LEN) {
+        inputBuf += c;
+      } else {
+        Serial.println("[WARN] CMD buffer full, clearing");
+        inputBuf = "";
+      }
     }
   }
 }
@@ -272,7 +356,7 @@ void sendTelemetry() {
   interrupts();
 
   // encL = average of left encoders, encR = average of right encoders
-  // +1 for rounding before integer truncation (averaged on Raspberry Pi side)
+  // +1 for rounding before integer truncation
   unsigned long encL = (fL + rL + 1) / 2;
   unsigned long encR = (fR + rR + 1) / 2;
 
@@ -302,6 +386,19 @@ void sendTelemetry() {
 void setup() {
   Serial.begin(115200);
   Serial1.begin(RPI_BAUD, SERIAL_8N1, RPI_RX, RPI_TX);
+
+  // HMC5883L compass (I2C: SDA=8, SCL=9)
+  Wire.begin(I2C_SDA, I2C_SCL);
+  compassOk = compass.begin();
+  if (compassOk) {
+    headingSource = 1;
+    float initH = readCompass();
+    if (initH >= 0.0f) heading = initH;
+    Serial.println("Compass: OK - absolute heading in use");
+  } else {
+    headingSource = 0;
+    Serial.println("Compass: NOT FOUND - odometry heading in use");
+  }
 
   // BTS7960 drive motors PWM - 1kHz, 8-bit
   ledcAttach(FRONT_RPWM, 1000, 8);
@@ -338,7 +435,15 @@ void setup() {
 
   lastCmdTime = millis();
   lastRpmTime = millis();
-  Serial.println("car ready (BTS7960 + 6x HC-SR04 + 4x LM393)");
+
+  Serial.println("=================================");
+  Serial.println("Car ready (BTS7960 + 6x HC-SR04 + 4x LM393)");
+  Serial.print  ("Heading source: ");
+  Serial.println(compassOk ? "HMC5883L compass" : "Odometry");
+  Serial.println("WHEEL_CIRC=0.8796m PULSES=100 DEBOUNCE=2ms ODO=50ms");
+  Serial.println("DEBUG=" + String(DEBUG ? "ON" : "OFF"));
+  Serial.println("Waiting for Raspberry Pi commands...");
+  Serial.println("=================================");
 }
 
 
@@ -357,21 +462,48 @@ void loop() {
     lastSensorTime = millis();
   }
 
-  // Front obstacle check (while driving forward)
-  if (driveSpeed > 0 && distFront > 0.0f && distFront < OBSTACLE_DIST_M) {
-    stopMotors();
-    Serial1.println("WARN:OBSTACLE");
+  // DEBUG: print status every 2 seconds
+  static unsigned long lastDebugPrint = 0;
+  if (DEBUG && millis() - lastDebugPrint >= 2000) {
+    noInterrupts();
+    unsigned long fR = encFrontRight, fL = encFrontLeft;
+    unsigned long rR = encRearRight,  rL = encRearLeft;
+    interrupts();
+    Serial.print("--- STATUS: spd="); Serial.print(driveSpeed);
+    Serial.print(" steer=");          Serial.print(steerAngle);
+    Serial.print(" head=");           Serial.print(heading, 1);
+    Serial.print(" encL=");           Serial.print((fL+rL)/2);
+    Serial.print(" encR=");           Serial.print((fR+rR)/2);
+    Serial.print(" dFront=");         Serial.print(distFront, 2);
+    Serial.print(" dFR=");            Serial.print(distFrontRight, 2);
+    Serial.print(" dFL=");            Serial.print(distFrontLeft, 2);
+    Serial.print(" dRear=");          Serial.println(distRear, 2);
+    lastDebugPrint = millis();
   }
+
+  // Front obstacle check (all 3 front sensors while driving forward)
+  if (driveSpeed > 0) {
+    float frontMin = min(distFront, min(distFrontRight, distFrontLeft));
+    if (frontMin > 0.0f && frontMin < OBSTACLE_DIST_M) {
+      DPRINT("OBSTACLE! frontMin="); DPRINTLN(frontMin);
+      stopMotors();
+      Serial1.println("WARN:OBSTACLE");
+    }
+  }
+
   // Rear obstacle check (while driving backward)
   if (driveSpeed < 0 && distRear > 0.0f && distRear < OBSTACLE_DIST_M) {
+    DPRINT("REAR OBSTACLE! dist="); DPRINTLN(distRear);
     stopMotors();
     Serial1.println("WARN:OBSTACLE_REAR");
   }
 
   sendTelemetry();
 
+  // Safety stop if no command received
   if (millis() - lastCmdTime > CMD_TIMEOUT) {
     if (driveSpeed != 0) {
+      DPRINTLN("TIMEOUT: no command received, stopping");
       stopMotors();
       Serial1.println("WARN:TIMEOUT");
     }

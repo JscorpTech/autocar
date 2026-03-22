@@ -1,0 +1,10 @@
+{
+  "name": "Test: 3.5m to'g'ri yurish",
+  "cell_size": 3.5,
+  "start": [0, 0],
+  "end": [1, 0],
+  "map": [
+    [1],
+    [1]
+  ]
+}

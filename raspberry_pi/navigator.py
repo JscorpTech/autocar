@@ -1,14 +1,15 @@
 import time
 import math
-from communicator import Communicator, TelemetryData
+from communicator import TelemetryData
 from config import (
-    WHEEL_CIRCUMFERENCE, PULSES_PER_REV, WHEEL_BASE,
-    BASE_SPEED, MIN_SPEED, MAX_SPEED, TURN_SPEED,
-    MAX_STEER_ANGLE, MIN_TURN_RADIUS,
+    WHEEL_CIRCUMFERENCE, PULSES_PER_REV,
+    BASE_SPEED, TURN_SPEED,
+    MAX_STEER_ANGLE,
     PID_KP, PID_KI, PID_KD,
     TURN_PID_KP, TURN_PID_KI, TURN_PID_KD,
     HEADING_TOLERANCE, WAYPOINT_REACHED, OBSTACLE_DISTANCE,
-    COMMAND_RATE_HZ
+    COMMAND_RATE_HZ, TURN_TIMEOUT_SEC,
+    OBSTACLE_WAIT_RETRIES, OBSTACLE_WAIT_SLEEP,
 )
 
 
@@ -57,7 +58,6 @@ class Navigator:
             -MAX_STEER_ANGLE, MAX_STEER_ANGLE
         )
         self.running = False
-        self.paused = False
         self.current_waypoint_idx = 0
 
     def navigate_waypoints(self, waypoints):
@@ -76,8 +76,7 @@ class Navigator:
             heading = wp["heading"]
             dist = wp["distance"]
 
-            print(f"\n[NAV] waypoint {idx + 1}/{total}: "
-                  f"{heading}°, {dist}m")
+            print(f"\n[NAV] waypoint {idx + 1}/{total}: {heading}deg, {dist:.2f}m")
 
             # turn first (Ackermann arc)
             if not self._turn_to_heading(heading):
@@ -106,40 +105,54 @@ class Navigator:
         t0 = time.time()
         reverse_mode = False
         attempts = 0
+        dt = 1.0 / COMMAND_RATE_HZ
+        last_log = time.time()
+
+        telem0 = self.comm.get_telemetry()
+        print(f"  [TURN] start: current={telem0.heading:.1f}deg, target={target}deg, "
+              f"err={self._heading_error(telem0.heading, target):.1f}deg")
 
         while self.running:
-            # overall 20-second timeout
-            if time.time() - t0 > 20:
-                print("  [TURN] timeout")
+            elapsed = time.time() - t0
+            if elapsed > TURN_TIMEOUT_SEC:
+                print(f"  [TURN] timeout ({TURN_TIMEOUT_SEC}s)")
                 self.comm.send_stop()
                 return False
 
             telem = self.comm.get_telemetry()
             err = self._heading_error(telem.heading, target)
 
-            # yetarlicha burilganmiz
             if abs(err) < HEADING_TOLERANCE:
                 self.comm.send_drive(0, 0)
                 time.sleep(0.15)
+                print(f"  [TURN] OK: {telem.heading:.1f}deg (target={target}deg, "
+                      f"err={err:.1f}deg, t={elapsed:.1f}s)")
                 return True
 
             # front obstacle check (front, front-right, front-left sensors)
             front_dist = min(telem.distance, telem.dist_front_right, telem.dist_front_left)
             if not reverse_mode and 0 < front_dist < OBSTACLE_DISTANCE:
-                reverse_mode = True
                 attempts += 1
                 if attempts > 5:
-                    print("  [TURN] not enough space, aborting")
+                    print("  [TURN] not enough space (5 attempts), aborting")
                     self.comm.send_stop()
                     return False
-                print(f"  [TURN] obstacle, reversing (attempt {attempts})")
+                print(f"  [TURN] obstacle {front_dist:.2f}m, reversing (attempt {attempts})")
+                reverse_mode = True
 
-            # compute steering angle with PID
             steer = self.heading_pid.compute(err)
             steer = max(-MAX_STEER_ANGLE, min(MAX_STEER_ANGLE, steer))
 
+            # log every 1 second
+            if time.time() - last_log >= 1.0:
+                print(f"  [TURN] {elapsed:.1f}s | "
+                      f"heading={telem.heading:.1f}deg | "
+                      f"err={err:.1f}deg | steer={steer:.0f}")
+                last_log = time.time()
+
             if reverse_mode:
                 # reverse with steering turned the opposite way
+                print(f"  [TURN] reversing: steer={-steer:.0f}")
                 self.comm.send_drive(-TURN_SPEED, int(-steer))
                 time.sleep(0.8)
                 self.comm.send_drive(0, 0)
@@ -149,7 +162,7 @@ class Navigator:
                 # drive forward slowly with wheels turned
                 self.comm.send_drive(TURN_SPEED, int(steer))
 
-            time.sleep(1.0 / COMMAND_RATE_HZ)
+            time.sleep(dt)
 
         return False
 
@@ -160,16 +173,39 @@ class Navigator:
         not differential motor speed.
         """
         self.straight_pid.reset()
-        self.comm.reset_encoders()
-        time.sleep(0.2)
-
         m_per_pulse = WHEEL_CIRCUMFERENCE / PULSES_PER_REV
+        print(f"  [DRIVE] start: {distance:.2f}m, heading={target_heading}deg")
+        print(f"  [DRIVE] m_per_pulse={m_per_pulse:.5f}m, "
+              f"pulses_needed~={distance/m_per_pulse:.0f}")
+
+        # Reset encoders and wait for ACK
+        self.comm.reset_encoders()
+        if not self.comm.wait_encoder_reset(timeout=1.5):
+            print("  [DRIVE] WARNING: encoder reset ACK not received, continuing")
+
+        # Extra check that encoder values are actually zero
+        deadline = time.time() + 0.8
+        while time.time() < deadline:
+            telem = self.comm.get_telemetry()
+            if telem.encoder_left == 0 and telem.encoder_right == 0:
+                print("  [DRIVE] encoder reset confirmed: OK")
+                break
+            time.sleep(0.05)
+        else:
+            telem = self.comm.get_telemetry()
+            print(f"  [DRIVE] WARNING: encoders not zero "
+                  f"(L={telem.encoder_left}, R={telem.encoder_right})")
+
         t0 = time.time()
-        timeout = distance * 5 + 10
+        timeout = max(distance * 5.0 + 10.0, 30.0)
+        dt = 1.0 / COMMAND_RATE_HZ
+        last_log = time.time()
+        front_dist = 999.0
 
         while self.running:
-            if time.time() - t0 > timeout:
-                print("  [DRIVE] timeout")
+            elapsed = time.time() - t0
+            if elapsed > timeout:
+                print(f"  [DRIVE] TIMEOUT ({timeout:.0f}s)")
                 self.comm.send_stop()
                 return False
 
@@ -180,23 +216,24 @@ class Navigator:
             if 0 < front_dist < OBSTACLE_DISTANCE:
                 print(f"  [DRIVE] obstacle! {front_dist:.2f}m")
                 self.comm.send_stop()
-                time.sleep(1)
-                retries = 0
-                while retries < 30:
+                time.sleep(1.0)
+                cleared = False
+                for retry in range(OBSTACLE_WAIT_RETRIES):
                     telem = self.comm.get_telemetry()
                     front_dist = min(telem.distance, telem.dist_front_right, telem.dist_front_left)
                     if front_dist >= OBSTACLE_DISTANCE:
-                        print("  [DRIVE] obstacle cleared")
+                        print(f"  [DRIVE] obstacle cleared (attempt {retry + 1})")
+                        cleared = True
                         break
-                    retries += 1
-                    time.sleep(0.5)
-                if retries >= 30:
-                    print("  [DRIVE] obstacle not cleared")
+                    time.sleep(OBSTACLE_WAIT_SLEEP)
+                if not cleared:
+                    print("  [DRIVE] obstacle not cleared, aborting")
                     return False
                 continue
 
             for w in self.comm.get_warnings():
                 if w in ("OBSTACLE", "OBSTACLE_REAR"):
+                    print(f"  [DRIVE] ESP32 WARN: {w}")
                     self.comm.send_stop()
                     time.sleep(0.5)
 
@@ -205,7 +242,8 @@ class Navigator:
 
             if traveled >= distance - WAYPOINT_REACHED / 2:
                 self.comm.send_drive(0, 0)
-                print(f"  [DRIVE] {traveled:.2f}m traveled")
+                print(f"  [DRIVE] REACHED! traveled={traveled:.3f}m "
+                      f"(pulses={avg_pulses:.0f}, target={distance:.2f}m)")
                 return True
 
             # steering correction based on odometry heading error
@@ -213,13 +251,24 @@ class Navigator:
             steer = self.straight_pid.compute(err)
             steer = max(-MAX_STEER_ANGLE, min(MAX_STEER_ANGLE, steer))
 
+            # log every 1 second
+            if time.time() - last_log >= 1.0:
+                print(f"  [DRIVE] {elapsed:.1f}s | "
+                      f"pulses={avg_pulses:.0f} | "
+                      f"traveled={traveled:.3f}m / {distance:.2f}m | "
+                      f"heading={telem.heading:.1f}deg err={err:.1f}deg | "
+                      f"steer={steer:.0f} | "
+                      f"front={front_dist:.2f}m")
+                last_log = time.time()
+
             self.comm.send_drive(BASE_SPEED, int(steer))
-            time.sleep(1.0 / COMMAND_RATE_HZ)
+            time.sleep(dt)
 
         self.comm.send_stop()
         return False
 
     def _heading_error(self, current, target):
+        """Returns heading difference in -180..+180 range"""
         diff = target - current
         while diff > 180:
             diff -= 360

@@ -1,6 +1,5 @@
 import json
 import heapq
-from typing import Optional
 from config import CELL_SIZE, DIRECTION_MAP
 
 
@@ -21,15 +20,62 @@ class MapManager:
             with open(filepath, 'r') as f:
                 data = json.load(f)
 
-            self.grid = data["map"]
-            self.rows = len(self.grid)
-            self.cols = len(self.grid[0]) if self.rows > 0 else 0
-            self.start = tuple(data["start"])
-            self.end = tuple(data["end"])
+            # Check required fields
+            for field in ("map", "start", "end"):
+                if field not in data:
+                    print(f"[MAP] error: '{field}' field missing")
+                    return False
 
-            print(f"[MAP] loaded: {self.rows}x{self.cols}, "
-                  f"start={self.start}, end={self.end}")
+            grid = data["map"]
+            if not isinstance(grid, list) or len(grid) == 0:
+                print("[MAP] error: map is empty or invalid")
+                return False
+
+            rows = len(grid)
+            cols = len(grid[0]) if rows > 0 else 0
+
+            # Size limit (DoS prevention)
+            if rows > 1000 or cols > 1000:
+                print(f"[MAP] error: map too large ({rows}x{cols})")
+                return False
+
+            # Check each row length
+            for r, row in enumerate(grid):
+                if not isinstance(row, list) or len(row) != cols:
+                    print(f"[MAP] error: row {r} has wrong length")
+                    return False
+
+            start = tuple(data["start"])
+            end = tuple(data["end"])
+
+            # Check start/end bounds
+            if not (len(start) == 2 and 0 <= start[0] < rows and 0 <= start[1] < cols):
+                print(f"[MAP] error: start {start} out of bounds ({rows}x{cols})")
+                return False
+            if not (len(end) == 2 and 0 <= end[0] < rows and 0 <= end[1] < cols):
+                print(f"[MAP] error: end {end} out of bounds ({rows}x{cols})")
+                return False
+            if grid[start[0]][start[1]] != 1:
+                print(f"[MAP] error: start {start} is not a passable cell")
+                return False
+            if grid[end[0]][end[1]] != 1:
+                print(f"[MAP] error: end {end} is not a passable cell")
+                return False
+
+            self.grid = grid
+            self.rows = rows
+            self.cols = cols
+            self.start = start
+            self.end = end
+            self.path = []
+            self.waypoints = []
+
+            print(f"[MAP] loaded: {rows}x{cols}, start={start}, end={end}")
             return True
+
+        except json.JSONDecodeError as e:
+            print(f"[MAP] JSON error: {e}")
+            return False
         except Exception as e:
             print(f"[MAP] error: {e}")
             return False
@@ -119,8 +165,8 @@ class MapManager:
             dist = steps * CELL_SIZE
             target = self.path[i + steps]
             waypoints.append({
-                "from": current,
-                "to": target,
+                "from": list(current),
+                "to": list(target),
                 "heading": heading,
                 "distance": dist,
                 "steps": steps,
@@ -131,11 +177,11 @@ class MapManager:
         print(f"[MAP] {len(waypoints)} waypoints")
         for idx, wp in enumerate(waypoints):
             print(f"  [{idx}] {wp['from']} -> {wp['to']}, "
-                  f"{wp['heading']}°, {wp['distance']}m")
+                  f"{wp['heading']}deg, {wp['distance']}m")
         return waypoints
 
     def print_map(self, path_overlay=None):
-        path_set = set(path_overlay or self.path)
+        path_set = set(tuple(p) for p in (path_overlay or self.path))
         print()
         for r in range(self.rows):
             row_str = ""

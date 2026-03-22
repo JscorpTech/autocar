@@ -14,19 +14,20 @@ SERIAL_TIMEOUT = 0.1
 # car dimensions
 CAR_LENGTH = 2.0        # length, metres
 CAR_WIDTH = 1.0         # width, metres
-WHEEL_DIAMETER = 0.25
-WHEEL_CIRCUMFERENCE = math.pi * WHEEL_DIAMETER
-WHEEL_BASE = 1.8        # distance between front and rear axles
-PULSES_PER_REV = 4
+WHEEL_DIAMETER = 0.28   # diameter, metres (radius 14cm)
+WHEEL_CIRCUMFERENCE = math.pi * WHEEL_DIAMETER  # ~0.8796m
+WHEEL_BASE = 1.8        # distance between front and rear axles, metres
+PULSES_PER_REV = 100    # LM393 encoder: 100 pulses/revolution (50-slot disc)
+# m_per_pulse = 0.8796 / 100 ~= 0.008796m (8.8mm) — high precision
 
 # steering (Ackermann) - BTS7960 steering motor control
 # steer_angle: -30..+30 degrees -> PWM changes proportionally
 MAX_STEER_ANGLE = 30.0  # maximum steering angle, degrees
 MIN_TURN_RADIUS = WHEEL_BASE / math.tan(math.radians(MAX_STEER_ANGLE))
-# 1.8 / tan(30°) ≈ 3.12m
+# 1.8 / tan(30deg) ~= 3.12m
 
 # map
-CELL_SIZE = 1.0
+CELL_SIZE = 1.0  # metres per cell (use >= 3.5m for real turns)
 
 # motor (PWM 0-255, BTS7960)
 BASE_SPEED = 150
@@ -53,7 +54,12 @@ WAYPOINT_REACHED = 0.15     # metres
 OBSTACLE_DISTANCE = 0.5     # metres
 COMMAND_RATE_HZ = 10
 
-# headings (odometry-based, north = 0°)
+# navigation timeouts and parameters
+TURN_TIMEOUT_SEC = 30.0     # max time for a turn, seconds
+OBSTACLE_WAIT_RETRIES = 30  # retries waiting for obstacle to clear
+OBSTACLE_WAIT_SLEEP = 0.5   # sleep between retries, seconds
+
+# headings (odometry-based, north = 0deg)
 NORTH = 0.0
 EAST = 90.0
 SOUTH = 180.0

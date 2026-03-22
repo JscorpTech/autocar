@@ -38,6 +38,7 @@ class Communicator:
         self._warnings = []
         self._rx_count = 0     # DATA packets received
         self._tx_count = 0     # commands sent
+        self._enc_reset_event = threading.Event()
 
     def connect(self):
         try:
@@ -52,15 +53,25 @@ class Communicator:
             self.serial_conn.reset_input_buffer()
 
             self.send_raw("PING\n")
-            time.sleep(0.5)
-            resp = self.serial_conn.readline().decode('utf-8', errors='ignore').strip()
 
-            if resp == "PONG":
+            # Wait up to 2 seconds for PONG (skip any DATA: lines)
+            deadline = time.time() + 2.0
+            got_pong = False
+            while time.time() < deadline:
+                if self.serial_conn.in_waiting > 0:
+                    line = self.serial_conn.readline().decode('utf-8', errors='ignore').strip()
+                    if line == "PONG":
+                        got_pong = True
+                        break
+                    # Skip DATA: lines that may arrive before PONG
+                time.sleep(0.05)
+
+            if got_pong:
                 _log.info("ESP32 connected: %s", self.port)
                 print(f"[COMM] ESP32 connected: {self.port}")
             else:
-                _log.warning("Unexpected response to PING: %r", resp)
-                print(f"[COMM] response: '{resp}', continuing")
+                _log.warning("No PONG received, continuing anyway")
+                print(f"[COMM] No PONG received, continuing")
 
             self._start_reader()
             return True
@@ -73,8 +84,11 @@ class Communicator:
         self._running = False
         if self._reader_thread:
             self._reader_thread.join(timeout=2)
-        self.send_drive(0, 0)
         if self.serial_conn and self.serial_conn.is_open:
+            try:
+                self.send_raw("STOP\n")
+            except Exception:
+                pass
             self.serial_conn.close()
         _log.info("Disconnected from ESP32. RX packets: %d, TX commands: %d",
                   self._rx_count, self._tx_count)
@@ -89,14 +103,20 @@ class Communicator:
         self.send_raw("STOP\n")
 
     def reset_encoders(self):
+        """Send encoder reset command and clear the ACK event."""
+        self._enc_reset_event.clear()
         self.send_raw("RESET_ENC\n")
+
+    def wait_encoder_reset(self, timeout=1.0):
+        """Wait for ACK:RESET_ENC from ESP32. Returns True on success."""
+        return self._enc_reset_event.wait(timeout)
 
     def send_raw(self, data):
         if self.serial_conn and self.serial_conn.is_open:
             try:
                 self.serial_conn.write(data.encode('utf-8'))
                 self._tx_count += 1
-                _log.debug("TX → %s", data.strip())
+                _log.debug("TX -> %s", data.strip())
             except serial.SerialException as e:
                 _log.error("Write error: %s", e)
                 print(f"[COMM] write error: {e}")
@@ -136,7 +156,7 @@ class Communicator:
                 if self.serial_conn and self.serial_conn.in_waiting > 0:
                     line = self.serial_conn.readline().decode('utf-8', errors='ignore').strip()
                     if line:
-                        _log.debug("RX ← %s", line)
+                        _log.debug("RX <- %s", line)
                         self._parse_line(line)
                 else:
                     time.sleep(0.01)
@@ -167,17 +187,25 @@ class Communicator:
                         self.telemetry.timestamp     = time.time()
                         self.telemetry.obstacle_warning = False
                     self._rx_count += 1
-            except (ValueError, IndexError):
+                else:
+                    print(f"[COMM] short DATA ({len(parts)} parts): '{line}'")
+                    _log.warning("Short DATA packet: %s", line)
+            except (ValueError, IndexError) as e:
                 _log.warning("Malformed DATA packet: %s", line)
+                print(f"[COMM] parse error: {e} | '{line}'")
 
         elif line.startswith("WARN:"):
             warning = line[5:]
             with self._lock:
                 self._warnings.append(warning)
-                if warning == "OBSTACLE":
+                if warning in ("OBSTACLE", "OBSTACLE_REAR"):
                     self.telemetry.obstacle_warning = True
             _log.warning("ESP32 warning: %s", warning)
             print(f"[COMM] warning: {warning}")
 
         elif line.startswith("ACK:"):
-            _log.info("ESP32 ACK: %s", line[4:])
+            ack = line[4:]
+            if ack == "RESET_ENC":
+                self._enc_reset_event.set()
+            _log.info("ESP32 ACK: %s", ack)
+            print(f"[COMM] ACK: {ack}")

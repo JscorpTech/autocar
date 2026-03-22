@@ -4,9 +4,14 @@ import sys
 import signal
 import argparse
 import time
+import math
 
 from logger import setup_logging
-from config import SERIAL_PORT, SERIAL_BAUD, SERIAL_TIMEOUT
+from config import (
+    SERIAL_PORT, SERIAL_BAUD, SERIAL_TIMEOUT,
+    WHEEL_CIRCUMFERENCE, PULSES_PER_REV, WHEEL_BASE,
+    MAX_SPEED,
+)
 from communicator import Communicator
 from map_manager import MapManager
 from navigator import Navigator
@@ -92,7 +97,12 @@ class AutonomousCar:
 
 
 class SimulatedCommunicator:
-    """Used for testing when ESP32 is not available"""
+    """Used for testing when ESP32 is not available.
+    Models realistic Ackermann physics:
+    - WHEEL_CIRCUMFERENCE and PULSES_PER_REV from config
+    - Outer/inner wheel arc difference calculated
+    - Encoder reset ACK returned immediately
+    """
 
     def __init__(self):
         self._heading = 0.0
@@ -109,11 +119,12 @@ class SimulatedCommunicator:
         pass
 
     def send_drive(self, speed, steer_angle):
-        self._speed = speed
-        self._steer_angle = max(-30, min(30, steer_angle))
         self._tick()
+        self._speed = max(-255, min(255, int(speed)))
+        self._steer_angle = max(-30, min(30, int(steer_angle)))
 
     def send_stop(self):
+        self._tick()
         self._speed = 0
         self._steer_angle = 0
 
@@ -121,16 +132,27 @@ class SimulatedCommunicator:
         self._enc_left = 0
         self._enc_right = 0
 
+    def wait_encoder_reset(self, timeout=1.0):
+        """Encoders reset immediately in simulation"""
+        return True
+
     def get_telemetry(self):
         from communicator import TelemetryData
         self._tick()
+        # RPM estimate: MAX_SPEED PWM ~= 200 RPM
+        rpm = abs(self._speed) * 200.0 / MAX_SPEED
         return TelemetryData(
             encoder_left=self._enc_left,
             encoder_right=self._enc_right,
             heading=self._heading,
-            rpm_left=abs(self._speed) * 0.5,
-            rpm_right=abs(self._speed) * 0.5,
+            rpm_left=rpm,
+            rpm_right=rpm,
             distance=999.0,
+            dist_front_right=999.0,
+            dist_front_left=999.0,
+            dist_right=999.0,
+            dist_left=999.0,
+            dist_rear=999.0,
             timestamp=time.time(),
             obstacle_warning=False,
         )
@@ -142,25 +164,52 @@ class SimulatedCommunicator:
         pass
 
     def _tick(self):
-        import math
         now = time.time()
         dt = now - self._last_update
         self._last_update = now
 
-        if dt > 0 and self._speed != 0:
-            pulse_rate = 10
-            pulses = int(abs(self._speed) * dt * pulse_rate / 255)
+        if dt <= 0 or self._speed == 0:
+            return
+
+        # Speed estimate: MAX_SPEED PWM ~= 1.0 m/s
+        speed_ms = (self._speed / MAX_SPEED) * 1.0  # m/s (signed)
+
+        m_per_pulse = WHEEL_CIRCUMFERENCE / PULSES_PER_REV
+        arc = speed_ms * dt  # distance traveled, metres (signed)
+
+        if abs(self._steer_angle) > 0.5:
+            # Ackermann turn: outer/inner wheel arc difference
+            rad = math.radians(abs(self._steer_angle))
+            turn_radius = WHEEL_BASE / math.tan(rad)  # mid-axle turn radius
+
+            # Heading change (rad -> degrees)
+            dTheta = math.degrees(arc / turn_radius)
+            if self._steer_angle < 0:
+                dTheta = -dTheta  # left turn = negative
+
+            # Outer and inner arcs (half width = CAR_WIDTH/2 = 0.5m)
+            half_width = 0.5  # metres
+            outer_arc = abs(arc) * (turn_radius + half_width) / turn_radius
+            inner_arc = abs(arc) * max(0.0, turn_radius - half_width) / turn_radius
+
+            outer_pulses = int(outer_arc / m_per_pulse)
+            inner_pulses = int(inner_arc / m_per_pulse)
+
+            if self._steer_angle > 0:  # right turn: right=inner, left=outer
+                left_pulses = outer_pulses
+                right_pulses = inner_pulses
+            else:  # left turn: left=inner, right=outer
+                left_pulses = inner_pulses
+                right_pulses = outer_pulses
+
+            self._enc_left += left_pulses
+            self._enc_right += right_pulses
+            self._heading = (self._heading + dTheta) % 360
+        else:
+            # Straight driving
+            pulses = int(abs(arc) / m_per_pulse)
             self._enc_left += pulses
             self._enc_right += pulses
-
-            # Ackermann turn simulation
-            if abs(self._steer_angle) > 1:
-                wheelbase = 1.8
-                rad = math.radians(self._steer_angle)
-                turn_radius = wheelbase / math.tan(rad)
-                speed_ms = self._speed / 255.0
-                omega = speed_ms / turn_radius
-                self._heading = (self._heading + math.degrees(omega * dt)) % 360
 
 
 def main():

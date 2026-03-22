@@ -9,9 +9,11 @@ import time
 import signal
 import argparse
 import threading
+from collections import deque
 
 from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO, emit
+from werkzeug.utils import secure_filename
 
 from logger import setup_logging, get_logger
 from config import SERIAL_PORT, SERIAL_BAUD, SERIAL_TIMEOUT, BASE_SPEED
@@ -20,10 +22,11 @@ from map_manager import MapManager
 from navigator import Navigator
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'autonomous-car-2026'
+# SECRET_KEY from environment variable; random on each restart if not set
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(24).hex())
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
-# Global State
+# Global state
 state = {
     "status": "idle",
     "map_loaded": False,
@@ -33,7 +36,7 @@ state = {
     "simulate": False,
     "waypoints_total": 0,
     "waypoints_done": 0,
-    "logs": [],
+    "logs": deque(maxlen=200),  # auto-bounded
 }
 
 comm = None
@@ -44,6 +47,7 @@ telemetry_thread = None
 running = True
 
 MAPS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'maps')
+os.makedirs(MAPS_DIR, exist_ok=True)
 
 
 def add_log(msg, level="info"):
@@ -53,8 +57,6 @@ def add_log(msg, level="info"):
         "level": level,
     }
     state["logs"].append(entry)
-    if len(state["logs"]) > 200:
-        state["logs"] = state["logs"][-200:]
     socketio.emit('log', entry)
 
 
@@ -87,20 +89,45 @@ def upload_map():
     if 'file' not in request.files:
         return jsonify({"error": "No file selected"}), 400
     file = request.files['file']
-    if file.filename == '':
+    if not file.filename:
         return jsonify({"error": "Empty filename"}), 400
     if not file.filename.endswith('.json'):
         return jsonify({"error": "Only .json files allowed"}), 400
-    filepath = os.path.join(MAPS_DIR, file.filename)
+
+    # Path traversal protection
+    safe_name = secure_filename(file.filename)
+    if not safe_name:
+        return jsonify({"error": "Invalid filename"}), 400
+
+    filepath = os.path.join(MAPS_DIR, safe_name)
     file.save(filepath)
+
     try:
         with open(filepath, 'r') as f:
-            json.load(f)
-        add_log(f"Map uploaded: {file.filename}", "success")
-        return jsonify({"success": True, "filename": file.filename})
+            data = json.load(f)
+
+        # Semantic validation
+        for field in ("map", "start", "end"):
+            if field not in data:
+                os.remove(filepath)
+                return jsonify({"error": f"'{field}' field missing"}), 400
+
+        grid = data["map"]
+        if not isinstance(grid, list) or len(grid) == 0 or len(grid) > 1000:
+            os.remove(filepath)
+            return jsonify({"error": "Invalid map size (max 1000x1000)"}), 400
+
+        add_log(f"Map uploaded: {safe_name}", "success")
+        return jsonify({"success": True, "filename": safe_name})
+
     except json.JSONDecodeError:
-        os.remove(filepath)
+        if os.path.exists(filepath):
+            os.remove(filepath)
         return jsonify({"error": "Invalid JSON format"}), 400
+    except Exception as e:
+        if os.path.exists(filepath):
+            os.remove(filepath)
+        return jsonify({"error": str(e)}), 500
 
 
 # ---- Socket.IO Events ----
@@ -108,15 +135,18 @@ def upload_map():
 @socketio.on('connect')
 def handle_connect():
     emit('state', get_full_state())
-    emit('log_history', state["logs"][-50:])
+    emit('log_history', list(state["logs"])[-50:])
 
 
 @socketio.on('load_map')
 def handle_load_map(data):
     global map_mgr
-    filename = data.get('filename', '')
-    filepath = os.path.join(MAPS_DIR, filename)
+    filename = secure_filename(data.get('filename', ''))
+    if not filename:
+        emit('error', {"msg": "Invalid filename"})
+        return
 
+    filepath = os.path.join(MAPS_DIR, filename)
     if not os.path.exists(filepath):
         emit('error', {"msg": f"Map not found: {filename}"})
         return
@@ -130,7 +160,7 @@ def handle_load_map(data):
         emit('map_data', get_map_state())
         emit('state', get_full_state())
     else:
-        emit('error', {"msg": "Failed to load map"})
+        emit('error', {"msg": "Failed to load map (format error)"})
 
 
 @socketio.on('find_path')
@@ -158,14 +188,23 @@ def handle_find_path():
 @socketio.on('start_navigation')
 def handle_start_nav():
     global nav_thread, navigator
+
     if state["status"] == "navigating":
         add_log("Navigation already running", "warn")
         return
     if not state["path_found"]:
         add_log("Find a path first", "warn")
         return
+    if not state["connected"]:
+        add_log("ESP32 not connected! Connect first.", "error")
+        return
 
-    navigator = Navigator(comm)
+    c = comm
+    if not c:
+        add_log("No communicator object!", "error")
+        return
+
+    navigator = Navigator(c)
     state["status"] = "navigating"
     state["waypoints_done"] = 0
     socketio.emit('state', get_full_state())
@@ -190,8 +229,9 @@ def handle_emergency():
     global navigator
     if navigator:
         navigator.emergency_stop()
-    if comm:
-        comm.send_stop()
+    c = comm
+    if c:
+        c.send_stop()
     state["status"] = "idle"
     socketio.emit('state', get_full_state())
     add_log("EMERGENCY STOP!", "error")
@@ -202,17 +242,19 @@ def handle_manual(data):
     if state["status"] == "navigating":
         return
     state["status"] = "manual"
-    speed = int(data.get('speed', 0))
-    angle = int(data.get('angle', 0))
-    if comm:
-        comm.send_drive(speed, angle)
+    speed = max(-255, min(255, int(data.get('speed', 0))))
+    angle = max(-30, min(30, int(data.get('angle', 0))))
+    c = comm
+    if c:
+        c.send_drive(speed, angle)
     socketio.emit('state', get_full_state())
 
 
 @socketio.on('manual_stop')
 def handle_manual_stop():
-    if comm:
-        comm.send_stop()
+    c = comm
+    if c:
+        c.send_stop()
     if state["status"] == "manual":
         state["status"] = "idle"
     socketio.emit('state', get_full_state())
@@ -220,8 +262,9 @@ def handle_manual_stop():
 
 @socketio.on('reset_encoders')
 def handle_reset_enc():
-    if comm:
-        comm.reset_encoders()
+    c = comm
+    if c:
+        c.reset_encoders()
     add_log("Encoders reset", "info")
 
 
@@ -231,79 +274,82 @@ def run_navigation():
     global navigator
     try:
         waypoints = map_mgr.waypoints
-        original_nav = navigator.navigate_waypoints
+        total = len(waypoints)
+        navigator.running = True
+        navigator.current_waypoint_idx = 0
 
-        # Waypoint progress tracking wrapper
-        def tracked_navigate(wps):
-            navigator.running = True
-            navigator.current_waypoint_idx = 0
-            total = len(wps)
+        for idx, wp in enumerate(waypoints):
+            if not navigator.running:
+                break
 
-            for idx, wp in enumerate(wps):
-                if not navigator.running:
-                    return False
-                navigator.current_waypoint_idx = idx
-                state["waypoints_done"] = idx
+            navigator.current_waypoint_idx = idx
+            state["waypoints_done"] = idx
+            socketio.emit('state', get_full_state())
+            socketio.emit('nav_progress', {
+                "current": idx,
+                "total": total,
+                "waypoint": wp,
+            })
+            add_log(f"Waypoint {idx + 1}/{total}: {wp['heading']}deg, {wp['distance']}m")
+
+            if not navigator._turn_to_heading(wp["heading"]):
+                add_log(f"Turn failed ({wp['heading']}deg)", "error")
+                state["status"] = "idle"
                 socketio.emit('state', get_full_state())
-                socketio.emit('nav_progress', {
-                    "current": idx,
-                    "total": total,
-                    "waypoint": wp,
-                })
-                add_log(f"Waypoint {idx+1}/{total}: {wp['heading']}°, {wp['distance']}m")
+                return
 
-                if not navigator._turn_to_heading(wp["heading"]):
-                    return False
-                if not navigator._drive_distance(wp["distance"], wp["heading"]):
-                    return False
+            if not navigator._drive_distance(wp["distance"], wp["heading"]):
+                add_log(f"Drive failed ({wp['distance']}m)", "error")
+                state["status"] = "idle"
+                socketio.emit('state', get_full_state())
+                return
 
-            return True
-
-        success = tracked_navigate(waypoints)
-
-        if success:
+        if navigator.running:
             state["status"] = "idle"
-            state["waypoints_done"] = state["waypoints_total"]
+            state["waypoints_done"] = total
             add_log("DESTINATION REACHED!", "success")
         else:
             state["status"] = "idle"
             add_log("Navigation cancelled", "warn")
+
     except Exception as e:
         state["status"] = "error"
         add_log(f"Navigation error: {str(e)}", "error")
     finally:
-        if comm:
-            comm.send_stop()
+        c = comm
+        if c:
+            c.send_stop()
         socketio.emit('state', get_full_state())
 
 
 def telemetry_loop():
     while running:
-        if comm:
+        c = comm  # thread-safe snapshot
+        if c:
             try:
-                t = comm.get_telemetry()
+                t = c.get_telemetry()
                 telemetry_data = {
-                    "encoder_left": t.encoder_left,
+                    "encoder_left":  t.encoder_left,
                     "encoder_right": t.encoder_right,
-                    "heading": round(t.heading, 1),
-                    "rpm_left": round(t.rpm_left, 1),
-                    "rpm_right": round(t.rpm_right, 1),
-                    "distance": round(t.distance, 2),
+                    "heading":       round(t.heading, 1),
+                    "rpm_left":      round(t.rpm_left, 1),
+                    "rpm_right":     round(t.rpm_right, 1),
+                    "distance":      round(t.distance, 2),
                     "dist_front_right": round(t.dist_front_right, 2),
-                    "dist_front_left": round(t.dist_front_left, 2),
-                    "dist_right": round(t.dist_right, 2),
-                    "dist_left": round(t.dist_left, 2),
-                    "dist_rear": round(t.dist_rear, 2),
-                    "obstacle": t.obstacle_warning,
+                    "dist_front_left":  round(t.dist_front_left, 2),
+                    "dist_right":    round(t.dist_right, 2),
+                    "dist_left":     round(t.dist_left, 2),
+                    "dist_rear":     round(t.dist_rear, 2),
+                    "obstacle":      t.obstacle_warning,
                 }
                 socketio.emit('telemetry', telemetry_data)
 
-                warnings = comm.get_warnings()
+                warnings = c.get_warnings()
                 for w in warnings:
                     add_log(f"ESP32: {w}", "warn")
             except Exception:
                 pass
-        time.sleep(0.15)
+        time.sleep(0.05)  # 20Hz
 
 
 # ---- Helpers ----
@@ -322,7 +368,7 @@ def get_full_state():
 
 
 def get_map_state():
-    result = {
+    return {
         "grid": map_mgr.grid,
         "rows": map_mgr.rows,
         "cols": map_mgr.cols,
@@ -331,13 +377,12 @@ def get_map_state():
         "path": [list(p) for p in map_mgr.path],
         "waypoints": map_mgr.waypoints,
     }
-    return result
 
 
 # ---- Main ----
 
 def main():
-    global comm, running, state, telemetry_thread
+    global comm, running, telemetry_thread
 
     setup_logging()
     parser = argparse.ArgumentParser(description="Autonomous Car - Web UI")
@@ -370,9 +415,13 @@ def main():
     def shutdown(sig, frame):
         global running
         running = False
-        if comm and not args.simulate:
-            comm.send_stop()
-            comm.disconnect()
+        c = comm
+        if c and not args.simulate:
+            try:
+                c.send_stop()
+                c.disconnect()
+            except Exception:
+                pass
         sys.exit(0)
 
     signal.signal(signal.SIGINT, shutdown)
