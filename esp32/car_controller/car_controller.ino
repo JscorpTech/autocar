@@ -60,8 +60,10 @@
 #define ENC_REAR_LEFT     2   // strapping pin: must be LOW at boot
 
 // --- Serial connection to Raspberry Pi ---
-#define RPI_TX    43
-#define RPI_RX    44
+// GPIO 43/44 are UART0 (USB-CDC) on ESP32-S3 — cannot use for Serial1
+// Use GPIO 1 (TX) and GPIO 3 (RX) instead
+#define RPI_TX    1
+#define RPI_RX    3
 #define RPI_BAUD  115200
 
 // --- Car parameters ---
