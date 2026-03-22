@@ -12,9 +12,9 @@
 //  - HMC5883L compass (if not connected, odometry heading used)
 // =====================================================================
 
-// DEBUG mode: true = verbose log on Serial Monitor
-// Arduino IDE → Tools → Serial Monitor → 115200 baud
-#define DEBUG true
+// DEBUG mode: false = clean serial (only DATA/WARN/ACK for Raspberry Pi)
+// Set true only when debugging with Arduino IDE Serial Monitor (Pi disconnected)
+#define DEBUG false
 #define DPRINT(x)   if(DEBUG) { Serial.print(millis()); Serial.print("ms | "); Serial.print(x); }
 #define DPRINTLN(x) if(DEBUG) { Serial.print(millis()); Serial.print("ms | "); Serial.println(x); }
 
@@ -60,10 +60,7 @@
 #define ENC_REAR_LEFT     2   // strapping pin: must be LOW at boot
 
 // --- Serial connection to Raspberry Pi ---
-// GPIO 43/44 are UART0 (USB-CDC) on ESP32-S3 — cannot use for Serial1
-// Use GPIO 1 (TX) and GPIO 3 (RX) instead
-#define RPI_TX    1
-#define RPI_RX    3
+// Uses USB Serial (UART0) — connect Pi via USB cable (/dev/ttyUSB0 or /dev/ttyACM0)
 #define RPI_BAUD  115200
 
 // --- Car parameters ---
@@ -311,7 +308,7 @@ void processCommand(String cmd) {
     stopMotors();
   }
   else if (cmd == "PING") {
-    Serial1.println("PONG");
+    Serial.println("PONG");
     DPRINTLN("PING -> PONG sent");
   }
   else if (cmd == "RESET_ENC") {
@@ -321,7 +318,7 @@ void processCommand(String cmd) {
     interrupts();
     // CRITICAL FIX: heading is NOT reset here — resetting it caused
     // the car to steer hard throughout entire drive after encoder reset
-    Serial1.println("ACK:RESET_ENC");
+    Serial.println("ACK:RESET_ENC");
     DPRINT("RESET_ENC ok, heading="); DPRINTLN(heading);
   }
   else {
@@ -330,8 +327,8 @@ void processCommand(String cmd) {
 }
 
 void readCommands() {
-  while (Serial1.available()) {
-    char c = Serial1.read();
+  while (Serial.available()) {
+    char c = Serial.read();
     if (c == '\n' || c == '\r') {
       if (inputBuf.length() > 0) {
         processCommand(inputBuf);
@@ -376,7 +373,7 @@ void sendTelemetry() {
   data += String(distLeft,       2)     + ",";
   data += String(distRear,       2);
 
-  Serial1.println(data);
+  Serial.println(data);
   lastDataSend = millis();
 }
 
@@ -386,8 +383,7 @@ void sendTelemetry() {
 // =====================================================================
 
 void setup() {
-  Serial.begin(115200);
-  Serial1.begin(RPI_BAUD, SERIAL_8N1, RPI_RX, RPI_TX);
+  Serial.begin(RPI_BAUD);  // USB Serial — both debug and Raspberry Pi communication
 
   // HMC5883L compass (I2C: SDA=8, SCL=9)
   Wire.begin(I2C_SDA, I2C_SCL);
@@ -489,7 +485,7 @@ void loop() {
     if (frontMin > 0.0f && frontMin < OBSTACLE_DIST_M) {
       DPRINT("OBSTACLE! frontMin="); DPRINTLN(frontMin);
       stopMotors();
-      Serial1.println("WARN:OBSTACLE");
+      Serial.println("WARN:OBSTACLE");
     }
   }
 
@@ -497,7 +493,7 @@ void loop() {
   if (driveSpeed < 0 && distRear > 0.0f && distRear < OBSTACLE_DIST_M) {
     DPRINT("REAR OBSTACLE! dist="); DPRINTLN(distRear);
     stopMotors();
-    Serial1.println("WARN:OBSTACLE_REAR");
+    Serial.println("WARN:OBSTACLE_REAR");
   }
 
   sendTelemetry();
@@ -507,7 +503,7 @@ void loop() {
     if (driveSpeed != 0) {
       DPRINTLN("TIMEOUT: no command received, stopping");
       stopMotors();
-      Serial1.println("WARN:TIMEOUT");
+      Serial.println("WARN:TIMEOUT");
     }
   }
 }
