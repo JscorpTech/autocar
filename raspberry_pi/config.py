@@ -22,9 +22,9 @@ PULSES_PER_REV = 18     # LM393 encoder: 18 pulses/revolution
 
 # steering (Ackermann) - BTS7960 steering motor control
 # steer_angle: -25..+25 degrees -> PWM changes proportionally
-MAX_STEER_ANGLE = 25.0  # maximum steering angle, degrees
+MAX_STEER_ANGLE = 20.0  # maximum steering angle, degrees
 MIN_TURN_RADIUS = WHEEL_BASE / math.tan(math.radians(MAX_STEER_ANGLE))
-# 0.95 / tan(25deg) ~= 2.04m
+# 0.95 / tan(20deg) ~= 2.61m
 
 # map
 CELL_SIZE = 1.0  # metres per cell (use >= 2.5m for real turns)

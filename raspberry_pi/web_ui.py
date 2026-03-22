@@ -243,7 +243,7 @@ def handle_manual(data):
         return
     state["status"] = "manual"
     speed = max(-255, min(255, int(data.get('speed', 0))))
-    angle = max(-25, min(25, int(data.get('angle', 0))))
+    angle = max(-20, min(20, int(data.get('angle', 0))))
     c = comm
     if c:
         c.send_drive(speed, angle)

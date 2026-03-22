@@ -69,7 +69,7 @@
 #define DEBOUNCE_MS     5        // 5ms: at 1m/s ~61ms interval, safe
 #define WHEEL_CIRC      1.0996f  // PI*0.35m (diameter 35cm)
 #define WHEEL_BASE      0.95f    // front-rear axle distance, metres
-#define MAX_STEER       25       // maximum steering angle, degrees
+#define MAX_STEER       20       // maximum steering angle, degrees
 
 // --- Communication and safety ---
 #define DATA_INTERVAL   100      // telemetry send interval, ms

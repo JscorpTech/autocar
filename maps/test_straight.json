@@ -1,7 +1,7 @@
 {
-  "name": "Test: To'g'ri yurish 7.5m",
-  "description": "3 ta katak janubga = 3 x 2.5m = 7.5m. Encoder va PID kalibrlash uchun.",
-  "cell_size": 2.5,
+  "name": "Test: To'g'ri yurish 9m",
+  "description": "3 ta katak janubga = 3 x 3.0m = 9m. Encoder va PID kalibrlash uchun.",
+  "cell_size": 3.0,
   "start": [0, 0],
   "end": [3, 0],
   "map": [

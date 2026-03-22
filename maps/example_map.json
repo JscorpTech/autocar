@@ -1,7 +1,7 @@
 {
   "name": "Namuna Xarita - Z-marshrut",
-  "description": "6x6 grid, cell_size=2.5m. Jami maydon 15x15m. Z-shaklidagi marshrut: sharq, janub, sharq, janub. Jami ~27.5m.",
-  "cell_size": 2.5,
+  "description": "6x6 grid, cell_size=3.0m. Jami maydon 18x18m. Z-shaklidagi marshrut: sharq, janub, sharq, janub. Jami ~33m.",
+  "cell_size": 3.0,
   "start": [0, 0],
   "end": [5, 5],
   "map": [

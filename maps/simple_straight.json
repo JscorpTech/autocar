@@ -1,7 +1,7 @@
 {
   "name": "Oddiy To'g'ri Yo'l",
-  "description": "5 katak sharqqa = 5 x 2.5m = 12.5m to'g'ri yurish.",
-  "cell_size": 2.5,
+  "description": "5 katak sharqqa = 5 x 3.0m = 15m to'g'ri yurish.",
+  "cell_size": 3.0,
   "start": [0, 0],
   "end": [0, 4],
   "map": [
