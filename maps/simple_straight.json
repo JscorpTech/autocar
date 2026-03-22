@@ -1,14 +1,10 @@
 {
   "name": "Oddiy To'g'ri Yo'l",
-  "description": "5x10 grid, to'g'ri yo'l bilan test",
-  "cell_size": 1.0,
-  "start": [2, 0],
-  "end": [2, 9],
+  "description": "5 katak sharqqa = 5 x 2.5m = 12.5m to'g'ri yurish.",
+  "cell_size": 2.5,
+  "start": [0, 0],
+  "end": [0, 4],
   "map": [
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 1, 1, 1, 1, 1, 1, 1, 1, 0],
-    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [0, 1, 1, 1, 1, 1, 1, 1, 1, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    [1, 1, 1, 1, 1]
   ]
 }

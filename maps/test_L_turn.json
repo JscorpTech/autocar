@@ -1,0 +1,13 @@
+{
+  "name": "Test: L-burilish (janub + sharq)",
+  "description": "3 katak janub (7.5m), keyin 3 katak sharq (7.5m). Bitta 90deg burilishni sinash uchun.",
+  "cell_size": 2.5,
+  "start": [0, 0],
+  "end": [3, 3],
+  "map": [
+    [1, 0, 0, 0],
+    [1, 0, 0, 0],
+    [1, 0, 0, 0],
+    [1, 1, 1, 1]
+  ]
+}

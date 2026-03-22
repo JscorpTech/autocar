@@ -1,0 +1,13 @@
+{
+  "name": "Test: U-shakl (2 ta burilish)",
+  "description": "3 katak janub, 2 katak sharq, 3 katak shimol. Ikkita 90deg burilish testi.",
+  "cell_size": 2.5,
+  "start": [0, 0],
+  "end": [0, 2],
+  "map": [
+    [1, 0, 1],
+    [1, 0, 1],
+    [1, 0, 1],
+    [1, 1, 1]
+  ]
+}
