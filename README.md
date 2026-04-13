@@ -127,7 +127,19 @@ python3 main.py ../maps/example_map.json --port /dev/ttyUSB0
 
 # Simulyatsiya (ESP32 siz test)
 python3 main.py --simulate ../maps/example_map.json
+
+# Terminaldan qo'lda boshqarish (test)
+python3 main.py --manual --port /dev/ttyUSB0
+
+# Simulyatsiyada terminal boshqaruv
+python3 main.py --manual --simulate
 ```
+
+Manual rejimdagi asosiy buyruqlar:
+- `w / s` — tezlikni oshirish / kamaytirish (oldinga-orqaga)
+- `a / d` — rulni chapga / o'ngga burish
+- `x` — to'xtatish
+- `q` — chiqish
 
 ### 3. Natija
 ```
