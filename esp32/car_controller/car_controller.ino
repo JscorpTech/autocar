@@ -1,6 +1,6 @@
 // =====================================================================
 // Autonomous Car - ESP32 Firmware
-// BTS7960 motors + 6x HC-SR04 + 4x LM393 + HMC5883L compass
+// BTS7960 drive motors + L298N steering + 6x HC-SR04 + 4x LM393 + HMC5883L compass
 //
 // Key parameters:
 //  - WHEEL_CIRC: 1.0996m (diameter 35cm)
@@ -28,16 +28,25 @@ Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(12345);
 bool compassAvailable = false;
 #define DECLINATION_TASHKENT  5.0f  // Magnetic declination for Tashkent, Uzbekistan (+5 degrees)
 
-// --- BTS7960 motors ---
+// --- Drive motors (BTS7960) ---
 // front motors
 #define FRONT_RPWM      18
 #define FRONT_LPWM      19
 // rear motors
 #define REAR_RPWM       21
 #define REAR_LPWM       22
-// steering motor
-#define STEER_RPWM      26
-#define STEER_LPWM      27
+
+// --- Steering motor (L298N) ---
+// User wiring:
+//   IN1 -> GPIO26
+//   IN2 -> GPIO27
+//   IN3 -> GPIO12
+//   IN4 -> GPIO25
+// ENA/ENB are tied HIGH in hardware.
+#define STEER_IN1       26
+#define STEER_IN2       27
+#define STEER_IN3       12
+#define STEER_IN4       25
 
 // --- I2C for HMC5883L compass ---
 #define I2C_SDA           4    // HMC5883L SDA
@@ -50,11 +59,11 @@ bool compassAvailable = false;
 #define FRONT_RIGHT_ECHO  16
 #define FRONT_LEFT_TRIG   17
 #define FRONT_LEFT_ECHO   23
-#define RIGHT_TRIG        25
+#define RIGHT_TRIG        41   // moved from GPIO25 (now STEER_IN4)
 #define RIGHT_ECHO        32
 #define LEFT_TRIG         33
 #define LEFT_ECHO         34   // input only, no internal pull-up/pull-down
-#define REAR_TRIG         12   // moved from GPIO4 to keep GPIO4 for compass SDA
+#define REAR_TRIG         42   // moved from GPIO12 (now STEER_IN3)
 #define REAR_ECHO         35   // input only
 
 // --- LM393 IR odometry sensors (4 total) ---
@@ -67,13 +76,15 @@ bool compassAvailable = false;
 // Uses USB Serial (UART0) — connect Pi via USB cable (/dev/ttyUSB0 or /dev/ttyACM0)
 #define RPI_BAUD  115200
 
-// --- PWM channels for BTS7960 (ESP32 Arduino core 2.x API) ---
+// --- PWM channels ---
 #define CH_FRONT_RPWM  0
 #define CH_FRONT_LPWM  1
 #define CH_REAR_RPWM   2
 #define CH_REAR_LPWM   3
-#define CH_STEER_RPWM  4
-#define CH_STEER_LPWM  5
+#define CH_STEER_IN1   4
+#define CH_STEER_IN2   5
+#define CH_STEER_IN3   6
+#define CH_STEER_IN4   7
 
 // --- Car parameters ---
 #define PULSES_PER_REV  18       // Encoder: 18 pulses/revolution (measured)
@@ -151,7 +162,7 @@ void IRAM_ATTR isr_RearLeft() {
 
 
 // =====================================================================
-// BTS7960 motor control
+// Drive (BTS7960) and steering (L298N) control
 // =====================================================================
 
 void setBTS7960(int rpwmCh, int lpwmCh, int spd) {
@@ -177,13 +188,38 @@ void setMotors(int spd) {
   DPRINT("MOTOR spd="); DPRINTLN(spd);
 }
 
+void setSteeringL298N(int pwm) {
+  // pwm: -255..255 (negative=left, positive=right)
+  pwm = constrain(pwm, -255, 255);
+  if (pwm > 0) {
+    // RIGHT
+    ledcWrite(CH_STEER_IN1, pwm);
+    ledcWrite(CH_STEER_IN2, 0);
+    ledcWrite(CH_STEER_IN3, pwm);
+    ledcWrite(CH_STEER_IN4, 0);
+  } else if (pwm < 0) {
+    // LEFT
+    int duty = -pwm;
+    ledcWrite(CH_STEER_IN1, 0);
+    ledcWrite(CH_STEER_IN2, duty);
+    ledcWrite(CH_STEER_IN3, 0);
+    ledcWrite(CH_STEER_IN4, duty);
+  } else {
+    // STOP
+    ledcWrite(CH_STEER_IN1, 0);
+    ledcWrite(CH_STEER_IN2, 0);
+    ledcWrite(CH_STEER_IN3, 0);
+    ledcWrite(CH_STEER_IN4, 0);
+  }
+}
+
 void setSteering(int angleDeg) {
   // angleDeg: -MAX_STEER..+MAX_STEER (negative=left, positive=right)
   // Proportional PWM: -20 -> -255, 0 -> 0, +20 -> +255
   angleDeg = constrain(angleDeg, -MAX_STEER, MAX_STEER);
   steerAngle = angleDeg;
   int pwm = (int)((float)angleDeg / (float)MAX_STEER * 255.0f);
-  setBTS7960(CH_STEER_RPWM, CH_STEER_LPWM, pwm);
+  setSteeringL298N(pwm);
   DPRINT("STEER angle="); DPRINT(angleDeg); DPRINT(" pwm="); DPRINTLN(pwm);
 }
 
@@ -200,19 +236,19 @@ void runSteeringTest() {
   DPRINTLN("STEER_TEST start");
 
   // RIGHT 1.5s
-  setBTS7960(CH_STEER_RPWM, CH_STEER_LPWM, 255);
+  setSteeringL298N(255);
   delay(1500);
 
   // Pause 1.5s
-  setBTS7960(CH_STEER_RPWM, CH_STEER_LPWM, 0);
+  setSteeringL298N(0);
   delay(1500);
 
   // LEFT 1.5s
-  setBTS7960(CH_STEER_RPWM, CH_STEER_LPWM, -255);
+  setSteeringL298N(-255);
   delay(1500);
 
   // Pause 2s and recenter command state
-  setBTS7960(CH_STEER_RPWM, CH_STEER_LPWM, 0);
+  setSteeringL298N(0);
   delay(2000);
   steerAngle = 0;
   DPRINTLN("STEER_TEST done");
@@ -450,9 +486,11 @@ void setup() {
   ledcSetup(CH_FRONT_LPWM, 1000, 8); ledcAttachPin(FRONT_LPWM, CH_FRONT_LPWM);
   ledcSetup(CH_REAR_RPWM,  1000, 8); ledcAttachPin(REAR_RPWM,  CH_REAR_RPWM);
   ledcSetup(CH_REAR_LPWM,  1000, 8); ledcAttachPin(REAR_LPWM,  CH_REAR_LPWM);
-  // BTS7960 steering motor PWM - 1kHz, 8-bit
-  ledcSetup(CH_STEER_RPWM, 1000, 8); ledcAttachPin(STEER_RPWM, CH_STEER_RPWM);
-  ledcSetup(CH_STEER_LPWM, 1000, 8); ledcAttachPin(STEER_LPWM, CH_STEER_LPWM);
+  // L298N steering input PWM - 1kHz, 8-bit
+  ledcSetup(CH_STEER_IN1, 1000, 8); ledcAttachPin(STEER_IN1, CH_STEER_IN1);
+  ledcSetup(CH_STEER_IN2, 1000, 8); ledcAttachPin(STEER_IN2, CH_STEER_IN2);
+  ledcSetup(CH_STEER_IN3, 1000, 8); ledcAttachPin(STEER_IN3, CH_STEER_IN3);
+  ledcSetup(CH_STEER_IN4, 1000, 8); ledcAttachPin(STEER_IN4, CH_STEER_IN4);
   stopMotors();
 
   // Ultrasonic trigger/echo pins
@@ -482,11 +520,11 @@ void setup() {
   lastRpmTime = millis();
 
   Serial.println("=================================");
-  Serial.println("Car ready (BTS7960 + 6x HC-SR04 + 4x LM393)");
+  Serial.println("Car ready (BTS7960 drive + L298N steering + 6x HC-SR04 + 4x LM393)");
   Serial.print("Heading source: ");
   Serial.println(compassAvailable ? "HMC5883L Compass (absolute)" : "Odometry (differential)");
   Serial.println("WHEEL_CIRC=1.0996m PULSES=18 DEBOUNCE=5ms ODO=50ms");
-  Serial.println("PINS: Compass GPIO4/5, REAR_TRIG GPIO12, ENC_RR GPIO0");
+  Serial.println("PINS: STEER IN1/2/3/4=26/27/12/25, RIGHT_TRIG=41, REAR_TRIG=42");
   Serial.println("DEBUG=" + String(DEBUG ? "ON" : "OFF"));
   Serial.println("Waiting for Raspberry Pi commands...");
   Serial.println("=================================");

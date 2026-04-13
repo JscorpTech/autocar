@@ -23,13 +23,14 @@ Mashinaga xarita (JSON) beriladi va u **A\* algoritmi** bilan yo'l topib, **enco
 |-----------|--------|--------|
 | Raspberry Pi 3/4/5 | 1 | Bosh kompyuter — yo'l topish, navigatsiya, Web UI |
 | ESP32 | 1 | Motor boshqaruv, sensor o'qish, odometriya |
-| BTS7960 Motor Driver | 3 | Oldinga/orqaga + rul motorlarini boshqarish |
+| BTS7960 Motor Driver | 2 | Oldinga/orqaga haydash motorlarini boshqarish |
+| L298N Motor Driver | 1 | Rul motorini boshqarish |
 | LM393 IR Encoder | 4 | G'ildirak aylanishini hisoblash (odometriya) |
 | HC-SR04 Ultrasonic | 6 | To'siq aniqlash (old, old-o'ng, old-chap, o'ng, chap, orqa) |
 
 ## Pin Ulanishlari (ESP32)
 
-### Haydash va Rul Motorlari (BTS7960)
+### Haydash (BTS7960) va Rul (L298N)
 
 | Pin | Signal | Tavsif |
 |-----|--------|--------|
@@ -37,8 +38,12 @@ Mashinaga xarita (JSON) beriladi va u **A\* algoritmi** bilan yo'l topib, **enco
 | GPIO 19 | FRONT_LPWM | Old motor — orqaga PWM |
 | GPIO 21 | REAR_RPWM  | Orqa motor — oldinga PWM |
 | GPIO 22 | REAR_LPWM  | Orqa motor — orqaga PWM |
-| GPIO 26 | STEER_RPWM | Rul motori — o'ng PWM |
-| GPIO 27 | STEER_LPWM | Rul motori — chap PWM |
+| GPIO 26 | STEER_IN1 | L298N rul kanali A IN1 |
+| GPIO 27 | STEER_IN2 | L298N rul kanali A IN2 |
+| GPIO 12 | STEER_IN3 | L298N rul kanali B IN3 |
+| GPIO 25 | STEER_IN4 | L298N rul kanali B IN4 |
+
+`L298N ENA` va `ENB` pinlari doimiy `HIGH` (3.3V) holatda ishlatiladi.
 
 ### Ultrasonic Sensorlar (HC-SR04)
 
@@ -47,9 +52,9 @@ Mashinaga xarita (JSON) beriladi va u **A\* algoritmi** bilan yo'l topib, **enco
 | GPIO 13 | GPIO 14 | Old markaziy |
 | GPIO 15 | GPIO 16 | Old o'ng |
 | GPIO 17 | GPIO 23 | Old chap |
-| GPIO 25 | GPIO 32 | O'ng yon |
+| GPIO 41 | GPIO 32 | O'ng yon |
 | GPIO 33 | GPIO 34 | Chap yon |
-| GPIO 4  | GPIO 35 | Orqa |
+| GPIO 42 | GPIO 35 | Orqa |
 
 ### Encoder Sensorlar (LM393 IR)
 
@@ -57,7 +62,7 @@ Mashinaga xarita (JSON) beriladi va u **A\* algoritmi** bilan yo'l topib, **enco
 |-----|--------|
 | GPIO 36 | Old o'ng encoder (faqat kirish, pull-up yo'q) |
 | GPIO 39 | Old chap encoder (faqat kirish, pull-up yo'q) |
-| GPIO 5  | Orqa o'ng encoder (strapping pin, INPUT_PULLUP) |
+| GPIO 0  | Orqa o'ng encoder (strapping pin, INPUT_PULLUP) |
 | GPIO 2  | Orqa chap encoder (strapping pin, INPUT_PULLUP) |
 
 ### Serial Aloqa
