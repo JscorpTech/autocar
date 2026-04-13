@@ -239,6 +239,15 @@ def handle_emergency():
 
 @socketio.on('manual_control')
 def handle_manual(data):
+    _handle_manual_input(data)
+
+
+@socketio.on('manual_drive')
+def handle_manual_drive(data):
+    _handle_manual_input(data)
+
+
+def _handle_manual_input(data):
     if state["status"] == "navigating":
         return
     state["status"] = "manual"

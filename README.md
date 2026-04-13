@@ -218,6 +218,15 @@ navigation started!
 | `PID_KP/KI/KD` | `1.5 / 0.03 / 0.4` | To'g'ri haydash PID koeffitsientlari |
 | `TURN_PID_KP/KI/KD` | `1.0 / 0.01 / 0.3` | Burilish PID koeffitsientlari |
 
+Motor yo'nalishi teskari bo'lsa (`W` bosilganda orqaga yursa), firmware'da
+quyidagi flaglarni tekshiring:
+```cpp
+// esp32/car_controller/car_controller.ino
+#define FRONT_MOTOR_INVERT 0
+#define REAR_MOTOR_INVERT  1
+```
+`1` — o'sha o'q yo'nalishini teskariga aylantiradi.
+
 ## 🖥️ Web UI Dashboard
 
 Professional web-interfeys orqali mashinani real-time boshqarish va monitoring qilish.

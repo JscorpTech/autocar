@@ -92,6 +92,9 @@ bool compassAvailable = false;
 #define WHEEL_CIRC      1.0996f  // PI*0.35m (diameter 35cm)
 #define WHEEL_BASE      0.95f    // front-rear axle distance, metres
 #define MAX_STEER       20       // maximum steering angle, degrees
+// Motor direction correction per axle (set to 1 to invert)
+#define FRONT_MOTOR_INVERT 0
+#define REAR_MOTOR_INVERT  1
 
 // --- Communication and safety ---
 #define DATA_INTERVAL   100      // telemetry send interval, ms
@@ -183,9 +186,13 @@ void setMotors(int spd) {
   // front and rear motors at the same speed (Ackermann)
   spd = constrain(spd, -255, 255);
   driveSpeed = spd;
-  setBTS7960(CH_FRONT_RPWM, CH_FRONT_LPWM, spd);
-  setBTS7960(CH_REAR_RPWM,  CH_REAR_LPWM,  spd);
-  DPRINT("MOTOR spd="); DPRINTLN(spd);
+  int frontSpd = FRONT_MOTOR_INVERT ? -spd : spd;
+  int rearSpd  = REAR_MOTOR_INVERT  ? -spd : spd;
+  setBTS7960(CH_FRONT_RPWM, CH_FRONT_LPWM, frontSpd);
+  setBTS7960(CH_REAR_RPWM,  CH_REAR_LPWM,  rearSpd);
+  DPRINT("MOTOR cmd="); DPRINT(spd);
+  DPRINT(" front="); DPRINT(frontSpd);
+  DPRINT(" rear="); DPRINTLN(rearSpd);
 }
 
 void setSteeringL298N(int pwm) {

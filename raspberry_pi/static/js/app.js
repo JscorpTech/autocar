@@ -78,13 +78,16 @@ socket.on('disconnect', () => {
 });
 
 socket.on('state', data => {
-  const sim = data.simulated;
+  const sim = !!data.simulate;
   simBadge.classList.toggle('hidden', !sim);
 
-  const st = (data.state || 'idle').toLowerCase();
+  const st = (data.status || 'idle').toLowerCase();
   setStatus(st);
 
-  btnStart.disabled     = st === 'navigating' || !pathData;
+  connBadge.dataset.connected = data.connected ? 'true' : 'false';
+  connText.textContent = data.connected ? 'Online' : 'Offline';
+
+  btnStart.disabled     = st === 'navigating' || !pathData || pathData.length < 2;
   btnStop.disabled      = st !== 'navigating';
   btnEmergency.disabled = false;
 });
@@ -97,28 +100,29 @@ socket.on('telemetry', data => {
 
 socket.on('map_data', data => {
   mapData = data;
-  pathData = null;
+  pathData = Array.isArray(data.path) ? data.path : [];
   activeWP = -1;
   progressSection.classList.add('hidden');
   mapEmpty.classList.add('hidden');
   renderMap();
   btnFindPath.disabled = false;
-  appendLog(`Map loaded: ${data.name || 'unnamed'}`, 'ok');
+  btnStart.disabled = pathData.length < 2;
+  appendLog(`Map loaded`, 'ok');
 });
 
 socket.on('path_found', data => {
   pathData = data.waypoints || [];
   renderMap();
-  btnStart.disabled = false;
+  btnStart.disabled = pathData.length < 2;
   appendLog(`Path: ${pathData.length} waypoints`, 'ok');
 });
 
 socket.on('nav_progress', data => {
   activeWP = data.current || 0;
   const total = data.total || 1;
-  const pct = Math.round((activeWP / total) * 100);
+  const pct = Math.round(((activeWP + 1) / total) * 100);
   progressBar.style.width = pct + '%';
-  progressText.textContent = `${activeWP} / ${total}`;
+  progressText.textContent = `${activeWP + 1} / ${total}`;
   progressSection.classList.remove('hidden');
   renderMap();
 });
@@ -127,9 +131,9 @@ socket.on('log', data => {
   const lvl = (data.level || '').toLowerCase();
   const cls = lvl === 'warn' || lvl === 'warning' ? 'log-warn'
             : lvl === 'error' ? 'log-error'
-            : lvl === 'ok'    ? 'log-ok'
+            : lvl === 'ok' || lvl === 'success' ? 'log-ok'
             : '';
-  appendLog(data.message || '', cls);
+  appendLog(data.msg || '', cls);
 });
 
 // ─────────────────────────────────────────── 4. STATUS ───
@@ -273,7 +277,7 @@ function renderMap() {
   if (!mapData) return;
 
   const canvas = mapCanvas;
-  const grid   = mapData.map;
+  const grid   = mapData.grid;
   const rows   = grid.length;
   const cols   = grid[0].length;
 
@@ -432,7 +436,7 @@ function initJoystick() {
     const right    = data.vector.x;
     const motorSpd = Math.round(fwd   * speed);
     const angle    = Math.round(right * 20);      // -20..+20 deg
-    socket.emit('manual_drive', { speed: motorSpd, angle });
+    socket.emit('manual_control', { speed: motorSpd, angle });
   });
 
   joystick.on('end', () => {
@@ -466,7 +470,7 @@ function sendKeyDrive() {
     if (m) { sv += m.speed; av += m.angle; }
   }
   if (sv !== 0 || av !== 0) {
-    socket.emit('manual_drive', {
+    socket.emit('manual_control', {
       speed: Math.sign(sv) * speed,
       angle: Math.max(-20, Math.min(20, av * 20)),
     });
@@ -550,8 +554,8 @@ function loadMapList() {
       mapSelect.innerHTML = '<option value="">Select map...</option>';
       maps.forEach(m => {
         const opt = document.createElement('option');
-        opt.value = m;
-        opt.textContent = m.replace(/_/g, ' ').replace('.json', '');
+        opt.value = m.filename;
+        opt.textContent = `${m.name} (${m.size})`;
         mapSelect.appendChild(opt);
       });
       btnLoadMap.disabled = true;
@@ -570,7 +574,7 @@ mapSelect.addEventListener('change', () => {
 btnLoadMap.addEventListener('click', () => {
   const name = mapSelect.value;
   if (!name) return;
-  socket.emit('load_map', { map_name: name });
+  socket.emit('load_map', { filename: name });
 });
 
 btnFindPath.addEventListener('click', () => {
