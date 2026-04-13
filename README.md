@@ -78,7 +78,13 @@ Mashinaga xarita (JSON) beriladi va u **A\* algoritmi** bilan yo'l topib, **enco
 1. Arduino IDE yoki PlatformIO o'rnating
 2. ESP32 board paketini qo'shing (`esp32 by Espressif Systems`)
 3. Qo'shimcha kutubxona kerak emas — standart Arduino API ishlatiladi
-4. `esp32/car_controller/car_controller.ino` faylini ESP32 ga yuklang
+4. PlatformIO loyihasi: asosiy firmware fayli `esp32/car_controller/src/main.cpp`
+5. Build/flash:
+```bash
+cd esp32/car_controller
+pio run
+pio run -t upload
+```
 
 ### Raspberry Pi
 ```bash
@@ -221,7 +227,7 @@ navigation started!
 Motor yo'nalishi teskari bo'lsa (`W` bosilganda orqaga yursa), firmware'da
 quyidagi flaglarni tekshiring:
 ```cpp
-// esp32/car_controller/car_controller.ino
+// esp32/car_controller/src/main.cpp
 #define FRONT_MOTOR_INVERT 0
 #define REAR_MOTOR_INVERT  1
 ```

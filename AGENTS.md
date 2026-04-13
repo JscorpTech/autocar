@@ -17,8 +17,9 @@ pip3 install pyserial flask flask-socketio
 #### ESP32 Setup
 1. Install Arduino IDE or PlatformIO.
 2. Add the ESP32 board package (`esp32 by Espressif Systems`).
-3. Flash the firmware:
-   `esp32/car_controller/car_controller.ino`
+3. Build/flash the PlatformIO project (`esp32/car_controller/`).
+4. Firmware source entrypoint:
+   `esp32/car_controller/src/main.cpp`
 
 ### ✅ Test Commands
 Testing is primarily through manual simulation or hardware runs:

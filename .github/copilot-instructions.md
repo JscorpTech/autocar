@@ -44,7 +44,7 @@ No repository lint command is currently configured.
 
 - **Two-tier runtime**
   - `raspberry_pi/`: high-level planning, navigation, and web control.
-  - `esp32/car_controller/car_controller.ino`: low-level motor/sensor control
+  - `esp32/car_controller/src/main.cpp`: low-level motor/sensor control
     and serial telemetry.
 
 - **CLI control path (`raspberry_pi/main.py`)**
@@ -71,7 +71,7 @@ No repository lint command is currently configured.
 ## Key conventions in this repository
 
 - Keep telemetry format backward-compatible across layers.
-  - `car_controller.ino` sends `DATA` fields in fixed order.
+  - `src/main.cpp` sends `DATA` fields in fixed order.
   - `raspberry_pi/communicator.py` parses by fixed index.
   - `raspberry_pi/web_ui.py` maps parsed telemetry to Socket.IO payloads.
   Any field order or naming change must be updated in all three places.

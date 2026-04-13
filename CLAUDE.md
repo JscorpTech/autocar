@@ -34,7 +34,7 @@ python3 web_ui.py --simulate --web-port 8080  # custom port
 ```
 Access at `http://localhost:5000` (default).
 
-**ESP32 firmware:** Flash `esp32/car_controller/car_controller.ino` via Arduino IDE. Requires libraries: `Adafruit HMC5883 Unified`, `Adafruit Unified Sensor`.
+**ESP32 firmware:** PlatformIO project at `esp32/car_controller/`, main source `esp32/car_controller/src/main.cpp`. Requires libraries: `Adafruit HMC5883 Unified`, `Adafruit Unified Sensor`.
 
 ## Architecture
 
