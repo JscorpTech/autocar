@@ -49,8 +49,8 @@ bool compassAvailable = false;
 #define STEER_IN4       25
 
 // --- I2C for HMC5883L compass ---
-#define I2C_SDA           4    // HMC5883L SDA
-#define I2C_SCL           5    // HMC5883L SCL
+#define I2C_SDA           8    // HMC5883L SDA
+#define I2C_SCL           9    // HMC5883L SCL
 
 // --- HC-SR04 ultrasonic sensors (6 total) ---
 #define FRONT_TRIG        13
@@ -59,17 +59,17 @@ bool compassAvailable = false;
 #define FRONT_RIGHT_ECHO  16
 #define FRONT_LEFT_TRIG   17
 #define FRONT_LEFT_ECHO   23
-#define RIGHT_TRIG        41   // moved from GPIO25 (now STEER_IN4)
+#define RIGHT_TRIG        41
 #define RIGHT_ECHO        32
 #define LEFT_TRIG         33
 #define LEFT_ECHO         34   // input only, no internal pull-up/pull-down
-#define REAR_TRIG         42   // moved from GPIO12 (now STEER_IN3)
+#define REAR_TRIG         4    // moved from GPIO42
 #define REAR_ECHO         35   // input only
 
 // --- LM393 IR odometry sensors (4 total) ---
 #define ENC_FRONT_RIGHT  36   // input only (VP), no internal pull-up/pull-down
 #define ENC_FRONT_LEFT   39   // input only (VN), no internal pull-up/pull-down
-#define ENC_REAR_RIGHT    0   // moved from GPIO5 to keep GPIO5 for compass SCL
+#define ENC_REAR_RIGHT    5
 #define ENC_REAR_LEFT     2   // strapping pin: must be LOW at boot
 
 // --- Serial connection to Raspberry Pi ---
@@ -92,6 +92,8 @@ bool compassAvailable = false;
 #define WHEEL_CIRC      1.0996f  // PI*0.35m (diameter 35cm)
 #define WHEEL_BASE      0.95f    // front-rear axle distance, metres
 #define MAX_STEER       20       // maximum steering angle, degrees
+#define STEER_MIN_PWM   150      // minimum torque when steering is non-zero
+#define STEER_FULL_POWER_ON_TURN 0  // 1 = always 255 PWM on any turn command
 // Motor direction correction per axle (set to 1 to invert)
 #define FRONT_MOTOR_INVERT 0
 #define REAR_MOTOR_INVERT  1
@@ -222,10 +224,20 @@ void setSteeringL298N(int pwm) {
 
 void setSteering(int angleDeg) {
   // angleDeg: -MAX_STEER..+MAX_STEER (negative=left, positive=right)
-  // Proportional PWM: -20 -> -255, 0 -> 0, +20 -> +255
+  // Steering motor needs enough breakaway torque; keep a minimum PWM when
+  // angle is non-zero, while preserving directional control.
   angleDeg = constrain(angleDeg, -MAX_STEER, MAX_STEER);
   steerAngle = angleDeg;
-  int pwm = (int)((float)angleDeg / (float)MAX_STEER * 255.0f);
+  int pwm = 0;
+  if (angleDeg != 0) {
+    int duty = 255;
+    if (!STEER_FULL_POWER_ON_TURN) {
+      int absAngle = abs(angleDeg);
+      duty = map(absAngle, 1, MAX_STEER, STEER_MIN_PWM, 255);
+      duty = constrain(duty, STEER_MIN_PWM, 255);
+    }
+    pwm = (angleDeg > 0) ? duty : -duty;
+  }
   setSteeringL298N(pwm);
   DPRINT("STEER angle="); DPRINT(angleDeg); DPRINT(" pwm="); DPRINTLN(pwm);
 }
@@ -481,7 +493,7 @@ void setup() {
   if (mag.begin()) {
     compassAvailable = true;
     DPRINTLN("HMC5883L compass detected!");
-    Serial.println("Compass: HMC5883L on GPIO4/5 (I2C)");
+    Serial.println("Compass: HMC5883L on GPIO8/9 (I2C)");
   } else {
     compassAvailable = false;
     DPRINTLN("HMC5883L compass NOT found - using odometry heading");
@@ -531,7 +543,7 @@ void setup() {
   Serial.print("Heading source: ");
   Serial.println(compassAvailable ? "HMC5883L Compass (absolute)" : "Odometry (differential)");
   Serial.println("WHEEL_CIRC=1.0996m PULSES=18 DEBOUNCE=5ms ODO=50ms");
-  Serial.println("PINS: STEER IN1/2/3/4=26/27/12/25, RIGHT_TRIG=41, REAR_TRIG=42");
+  Serial.println("PINS: STEER IN1/2/3/4=26/27/12/25, RIGHT_TRIG=41, REAR_TRIG=4");
   Serial.println("DEBUG=" + String(DEBUG ? "ON" : "OFF"));
   Serial.println("Waiting for Raspberry Pi commands...");
   Serial.println("=================================");

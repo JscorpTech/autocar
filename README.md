@@ -54,7 +54,7 @@ Mashinaga xarita (JSON) beriladi va u **A\* algoritmi** bilan yo'l topib, **enco
 | GPIO 17 | GPIO 23 | Old chap |
 | GPIO 41 | GPIO 32 | O'ng yon |
 | GPIO 33 | GPIO 34 | Chap yon |
-| GPIO 42 | GPIO 35 | Orqa |
+| GPIO 4 | GPIO 35 | Orqa |
 
 ### Encoder Sensorlar (LM393 IR)
 
@@ -62,7 +62,7 @@ Mashinaga xarita (JSON) beriladi va u **A\* algoritmi** bilan yo'l topib, **enco
 |-----|--------|
 | GPIO 36 | Old o'ng encoder (faqat kirish, pull-up yo'q) |
 | GPIO 39 | Old chap encoder (faqat kirish, pull-up yo'q) |
-| GPIO 0  | Orqa o'ng encoder (strapping pin, INPUT_PULLUP) |
+| GPIO 5  | Orqa o'ng encoder (INPUT_PULLUP) |
 | GPIO 2  | Orqa chap encoder (strapping pin, INPUT_PULLUP) |
 
 ### Serial Aloqa
@@ -226,6 +226,15 @@ quyidagi flaglarni tekshiring:
 #define REAR_MOTOR_INVERT  1
 ```
 `1` — o'sha o'q yo'nalishini teskariga aylantiradi.
+
+Rul kuchi kam bo'lsa (`A/D` yoki burilishda qimirlamasa), firmware'da:
+```cpp
+#define STEER_MIN_PWM   150
+#define STEER_FULL_POWER_ON_TURN 0
+```
+- `STEER_MIN_PWM` ni 170–200 oralig'iga ko'taring (ko'proq moment).
+- Juda og'ir rulda `STEER_FULL_POWER_ON_TURN 1` qilsangiz, burilish buyruqlari
+  to'g'ridan-to'g'ri 255 PWM bilan ishlaydi.
 
 ## 🖥️ Web UI Dashboard
 
