@@ -28,6 +28,6 @@ jobs:
       - name: Install PlatformIO
         run: pip install platformio
 
-      - name: Build ESP32-S3 firmware
+      - name: Build ESP32 DOIT firmware
         run: pio run
         working-directory: esp32/car_controller

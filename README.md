@@ -52,9 +52,12 @@ Mashinaga xarita (JSON) beriladi va u **A\* algoritmi** bilan yo'l topib, **enco
 | GPIO 13 | GPIO 14 | Old markaziy |
 | GPIO 15 | GPIO 16 | Old o'ng |
 | GPIO 17 | GPIO 23 | Old chap |
-| GPIO 41 | GPIO 32 | O'ng yon |
+| GPIO 33 | GPIO 32 | O'ng yon |
 | GPIO 33 | GPIO 34 | Chap yon |
 | GPIO 4 | GPIO 35 | Orqa |
+
+**Eslatma (ESP32 DOIT):** O'ng va chap yon sensorlar `TRIG` uchun bitta
+`GPIO33` ni ulashadi (pin yetishmasligi sababli).
 
 ### Encoder Sensorlar (LM393 IR)
 
@@ -69,8 +72,8 @@ Mashinaga xarita (JSON) beriladi va u **A\* algoritmi** bilan yo'l topib, **enco
 
 | Pin | Signal |
 |-----|--------|
-| GPIO 43 | TX — Raspberry Pi ga |
-| GPIO 44 | RX — Raspberry Pi dan |
+| GPIO 1 (TX0) | UART0 TX — USB-UART orqali Raspberry Pi bilan aloqa |
+| GPIO 3 (RX0) | UART0 RX — USB-UART orqali Raspberry Pi bilan aloqa |
 
 ## O'rnatish
 
@@ -79,7 +82,8 @@ Mashinaga xarita (JSON) beriladi va u **A\* algoritmi** bilan yo'l topib, **enco
 2. ESP32 board paketini qo'shing (`esp32 by Espressif Systems`)
 3. Qo'shimcha kutubxona kerak emas — standart Arduino API ishlatiladi
 4. PlatformIO loyihasi: asosiy firmware fayli `esp32/car_controller/src/main.cpp`
-5. Build/flash:
+5. Board profili: `esp32doit-devkit-v1`
+6. Build/flash:
 ```bash
 cd esp32/car_controller
 pio run

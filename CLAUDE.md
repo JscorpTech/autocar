@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Autonomous robot vehicle using **Raspberry Pi 4/5** (Python) + **ESP32-S3** (Arduino/C++). Implements Ackermann steering geometry, A* pathfinding, PID control, and real-time obstacle avoidance.
+Autonomous robot vehicle using **Raspberry Pi 4/5** (Python) + **ESP32 DOIT DevKit V1** (Arduino/C++). Implements Ackermann steering geometry, A* pathfinding, PID control, and real-time obstacle avoidance.
 
 ## Running the System
 
@@ -39,7 +39,7 @@ Access at `http://localhost:5000` (default).
 ## Architecture
 
 ### Two-tier system
-- **ESP32-S3**: Real-time hardware control (motors, sensors, encoders). Communicates via UART at 115200 baud.
+- **ESP32 (DOIT DevKit V1)**: Real-time hardware control (motors, sensors, encoders). Communicates via UART at 115200 baud.
 - **Raspberry Pi**: High-level planning (A* pathfinding, PID navigation, web dashboard).
 
 ### Raspberry Pi modules (`raspberry_pi/`)
